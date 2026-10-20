@@ -1,0 +1,23 @@
+CS2 Overlay 0.1.0 - Windows x64
+
+1. Extract the downloaded build, then open CS2Overlay.exe.
+2. Wait for the offset data to load. An Internet connection is required.
+3. Open CS2 and join a match on a team.
+4. Set CS2 to Fullscreen Windowed, then switch back to the game.
+
+The controller window remains available in the taskbar.
+F6 toggles the overlay. F8 quits the entire application.
+The on-screen boxes show approximate player height and health.
+The app displays opponents only, and skips unavailable/dormant entity data.
+
+If nothing appears, switch to the controller and copy its status/log.
+Read-access errors, missing data and layout mismatches are shown there.
+The application does not bypass blocked access or anti-cheat.
+
+Requirements: 64-bit Windows 10/11 with .NET Framework 4.8 or newer.
+The executable is unsigned.
+
+The build checks cover Windows startup, projection math and reading a fixture
+in the test process. They do not establish that this version works inside
+CS2 or with the current game update. Game updates can break the reader.
+No malware-free certification or anti-cheat guarantee is made.
