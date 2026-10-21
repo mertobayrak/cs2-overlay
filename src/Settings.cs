@@ -135,7 +135,7 @@ namespace Cs2Overlay
 
     internal static class KeyOptions
     {
-        internal static readonly int[] Activation = new int[] { (int)Keys.RButton, (int)Keys.LButton, (int)Keys.XButton1, (int)Keys.XButton2, (int)Keys.LMenu, (int)Keys.LShift };
+        internal static readonly int[] Activation = new int[] { (int)Keys.RButton, (int)Keys.LButton, (int)Keys.XButton1, (int)Keys.XButton2, (int)Keys.LMenu, (int)Keys.LShiftKey };
         internal static readonly int[] Globals = new int[] { (int)Keys.F1, (int)Keys.F2, (int)Keys.F3, (int)Keys.F4, (int)Keys.F5, (int)Keys.F6, (int)Keys.F7, (int)Keys.F8, (int)Keys.F9, (int)Keys.F10, (int)Keys.F11, (int)Keys.F12, (int)Keys.Insert, (int)Keys.Home, (int)Keys.End, (int)Keys.PageUp, (int)Keys.PageDown, (int)Keys.Pause };
         internal static readonly int[] Console = new int[] { (int)Keys.Oemtilde, (int)Keys.OemQuotes, (int)Keys.OemPipe, (int)Keys.OemBackslash };
         internal static bool IsActivation(int key) { return Array.IndexOf(Activation, key) >= 0; }
@@ -148,7 +148,7 @@ namespace Cs2Overlay
             if (key == (int)Keys.XButton1) return "Mouse 4";
             if (key == (int)Keys.XButton2) return "Mouse 5";
             if (key == (int)Keys.LMenu) return "Left Alt";
-            if (key == (int)Keys.LShift) return "Left Shift";
+            if (key == (int)Keys.LShiftKey) return "Left Shift";
             if (key == (int)Keys.Oemtilde) return "Grave / tilde";
             return ((Keys)key).ToString();
         }
