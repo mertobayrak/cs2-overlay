@@ -1,23 +1,51 @@
-CS2 Overlay 0.1.0 - Windows x64
+ModafenClientXZERO 0.3.0 - Windows x64
 
-1. Extract the downloaded build, then open CS2Overlay.exe.
-2. Wait for the offset data to load. An Internet connection is required.
-3. Open CS2 and join a match on a team.
-4. Set CS2 to Fullscreen Windowed, then switch back to the game.
+1. Close the old CS2Overlay.exe before starting this version.
+2. Extract the archive and run ModafenClientXZERO.exe.
+3. Open CS2 in Fullscreen Windowed and join a match.
+4. The Dashboard shows connection and offset status. Switch to CS2.
 
-The controller window remains available in the taskbar.
-F6 toggles the overlay. F8 quits the entire application.
-The on-screen boxes show approximate player height and health.
-The app displays opponents only, and skips unavailable/dormant entity data.
+DEFAULT KEYS
+F8   Show/hide the green settings panel (F8 no longer quits).
+F6   Wallhack on/off.
+F5   Aimbot on/off. Hold Right Mouse while enabled.
+F4   Aim assist on/off. Hold Left Mouse while enabled.
+F7   Bunnyhop on/off. Hold physical Space; Jump must be bound to Space.
+F9   Spinbot on/off: spins/looks down, auto jumps, and targets/fires as configured.
+F12  Everything off.
+F10  Quit the client.
 
-If nothing appears, switch to the controller and copy its status/log.
-Read-access errors, missing data and layout mismatches are shown there.
-The application does not bypass blocked access or anti-cheat.
+All input automation starts off. Change keys on Keybinds, then Apply keybinds.
+If a key is already used by another application, use the panel controls.
 
-Requirements: 64-bit Windows 10/11 with .NET Framework 4.8 or newer.
-The executable is unsigned.
+WALLHACK
+Disable Player boxes independently. Enable Skeleton / bones or Body silhouette
+from bones for red body styles. Choose colors, health, names, range and labels.
+Mark hostage carriers is toggleable. Radar with wallhack enables an external
+radar; orange dots identify hostage carriers when that data is available.
 
-The build checks cover Windows startup, projection math and reading a fixture
-in the test process. They do not establish that this version works inside
-CS2 or with the current game update. Game updates can break the reader.
-No malware-free certification or anti-cheat guarantee is made.
+AIM / SPIN
+Aimbot and assist have separate FOV, smoothing and activation controls.
+Spin targets spotted on-screen enemies, interrupting its rotation to aim.
+Auto-fire only clicks at a spotted enemy identified by the game crosshair.
+Input stops when CS2 loses focus or your local player is not alive.
+
+PRACTICE CAMERA
+Third person and FOV commands need a server with sv_cheats 1. These controls
+do not enable server cheats and public servers can reject them. FOV can be
+requested up to 200; the engine may clamp it. Enable the game developer
+console and select its actual key before Apply. Start with an empty prompt.
+Copy/export commands are also available. Applying pauses all automation.
+
+PERFORMANCE / PROFILES
+Refresh target defaults to 120 Hz; reduce it if CPU usage is high.
+The counter is client updates per second, not game FPS. Profiles save only
+when you select Save and load with input automation off.
+
+If attachment or offsets fail, read Dashboard diagnostics and Refresh offsets.
+Bone/model layouts can change with game updates. The silhouette follows
+bones; it is not a game-material replacement. Server-unavailable positions
+cannot be drawn.
+
+SHA256SUMS.txt and build-info.json identify this build. smoke-checks.json
+records offline checks. Live CS2 input and gameplay are not tested by CI.
