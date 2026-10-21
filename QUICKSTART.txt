@@ -62,6 +62,13 @@ requested up to 200; the engine may clamp it. Enable the game developer
 console and select its actual key before Apply. Start with an empty prompt.
 Copy/export commands are also available. Applying pauses all automation.
 
+SPECTATOR CHASE
+Practice camera > Spectator chase requests the mouse-cycle spectator chase
+view using spec_mode 5. First-person spectating uses spec_mode 4. These buttons
+use the selected console key after a 3-second countdown. You must already be
+dead or spectating, and the server must allow the view. They do not unlock a
+spectator camera while alive. Live Scout spin uses the separate practice camera.
+
 PERFORMANCE / PROFILES
 Refresh target defaults to 120 Hz; reduce it if CPU usage is high.
 The counter is client updates per second, not game FPS. Profiles save only

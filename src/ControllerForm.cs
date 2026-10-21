@@ -158,6 +158,12 @@ namespace Cs2Overlay
             AddButton(card, "Export practice camera .cfg", delegate { ExportCamera(); });
             AddButton(card, "Restore first person + default FOV", async delegate { settings.ThirdPerson = settings.CustomFov = false; SyncControls(); await ApplyCamera(); });
 
+            card = Card("Practice camera", "Spectator chase camera", "The third-person chase view used by spectator controls. CS2 must already have you dead or spectating; this command does not turn a living player into a spectator or unlock cameras on a server.");
+            AddButton(card, "Spectator chase (3 second countdown)", async delegate { await ApplyCamera(PracticeCamera.SpectatorCommand(true)); });
+            AddButton(card, "First-person spectating (3 seconds)", async delegate { await ApplyCamera(PracticeCamera.SpectatorCommand(false)); });
+            AddButton(card, "Copy spectator chase command", delegate { Run(delegate { Clipboard.SetText(PracticeCamera.SpectatorCommand(true)); Log("Spectator chase command copied. Use while dead or spectating."); }); });
+            Note(card, "Uses spec_mode 5 for chase and spec_mode 4 for first person. Server spectator rules still apply. Alive Scout spin uses the separate steady practice camera on the Spinbot page.", 112);
+
             card = Card("Keybinds", "Global toggles", "Pick a unique key for every action, then select Apply keybinds. The main controls also work when a key is already used by another app.");
             Check(card, "NoKeybinds", "NO KEYBINDS (menu key only)");
             KeyChoice(card, "MenuBind", "Show / hide menu", KeyOptions.Globals); KeyChoice(card, "EspBind", "Wallhack", KeyOptions.Globals); KeyChoice(card, "AimBind", "Aimbot", KeyOptions.Globals); KeyChoice(card, "AssistBind", "Aim assist", KeyOptions.Globals);
@@ -460,20 +466,20 @@ namespace Cs2Overlay
             if (settings.AimEnabled || settings.AssistEnabled) return AimEngine.Select(frame, settings, viewport, settings.AimEnabled ? 0 : 1, 0);
             return null;
         }
-        private async Task ApplyCamera()
+        private async Task ApplyCamera(string spectatorCommand = null)
         {
             if (cameraBusy || closing) return;
             if (!session.Attached) { Log("Open CS2 before applying camera commands."); return; }
             settings.DisableInputs(); SyncControls(); cameraBusy = true;
             try
             {
-                string command = PracticeCamera.Command(settings);
+                string command = spectatorCommand ?? PracticeCamera.Command(settings);
                 for (int i = 3; i >= 1; i--)
                 {
-                    SetState("Switch to CS2. Applying practice camera in " + i + "..."); await Task.Delay(1000); if (closing) return;
+                    SetState("Switch to CS2. Applying camera in " + i + "..."); await Task.Delay(1000); if (closing) return;
                 }
                 await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command, delegate { return !closing; });
-                if (!closing) Log("Camera command sent. The server must allow sv_cheats; check the game console for its response.");
+                if (!closing) Log(spectatorCommand != null ? "Spectator camera requested. You must be dead or spectating, and the server must allow this view." : "Camera command sent. The server must allow sv_cheats; check the game console for its response.");
             }
             catch (Exception error) { if (!closing) { SetState(error.Message); Log(error.Message); } }
             finally { cameraBusy = false; }

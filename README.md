@@ -56,6 +56,10 @@ On **Aimbot + assist**, **Show FOV circle (also when aim is off)** controls the 
 
 The green client uses a rounded custom window, rounded cards and buttons, subtle outlines, dark selectors, hover highlights and native resize/drag support. Minimize, maximize and close controls are in the upper right.
 
+## Spectator chase camera
+
+On **Practice camera**, the **Spectator chase** button requests `spec_mode 5`, the third-person player-follow view used by spectator controls. **First-person spectating** requests `spec_mode 4`. Both use the same console-key countdown and pause automation. CS2 must already have you dead or spectating, and the server must permit the view. This does not give a living player spectator privileges. The separate live Scout spin camera still uses the steady Maya practice camera.
+
 ## Smoother updates
 
 The previous 33 ms Windows Forms timer is replaced with a paced callback that queues at most one sample. Entity-page lookups are batched and reused within each sample, pawn fields are read together, and name reads are cached. Idle work is reduced when CS2 loses focus. The refresh setting is a target; actual cadence depends on Windows scheduling and read/render cost.

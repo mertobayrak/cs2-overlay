@@ -191,6 +191,7 @@ namespace Cs2Overlay
 
     internal static class PracticeCamera
     {
+        internal static string SpectatorCommand(bool thirdPerson) { return thirdPerson ? "spec_mode 5" : "spec_mode 4"; }
         internal static string SpinCommand(AppSettings settings)
         {
             settings.Validate();

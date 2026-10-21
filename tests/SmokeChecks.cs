@@ -185,6 +185,8 @@ namespace Cs2Overlay
             Require(!InputPolicy.SpinAllowed(settings, frame), "Unknown weapon data cannot activate spin");
             string command = PracticeCamera.SpinCommand(settings);
             Require(command.Contains("thirdperson_mayamode") && command.Contains("cam_snapto 1") && !command.Contains("sv_cheats"), "Spin requests the built-in Maya camera without enabling server cheats");
+            Require(PracticeCamera.SpectatorCommand(true) == "spec_mode 5" && PracticeCamera.SpectatorCommand(false) == "spec_mode 4",
+                "Spectator buttons request the built-in chase and first-person modes without modifying server rules");
             bool cancelled = false;
             try { InputSender.CameraCommand(IntPtr.Zero, 0, "thirdperson", delegate { return false; }).GetAwaiter().GetResult(); }
             catch (OperationCanceledException) { cancelled = true; }

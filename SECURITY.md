@@ -14,4 +14,6 @@ User-initiated profile saves write JSON under the current user's AppData/Modafen
 
 Apply camera commands types the selected commands into CS2's developer console after a countdown; it pauses automation first. It does not enable sv_cheats or bypass server camera permissions.
 
+The spectator chase and first-person buttons request spec_mode 5 and spec_mode 4 through that same console path. They do not write observer state or change a living player's permissions. They require the game to permit spectator controls.
+
 The Windows build checks use only the runner's test process and offline fixtures, including flash writes and restoration within that test process. UI previews use an offline mode without offset downloads, keyboard hooks or global hotkeys. The checks construct input packets but do not submit aim/jump/fire input. A successful build and source review are not malware certification. Live CS2 operation, game updates and anti-cheat compatibility are not verified by CI. The executable is unsigned.
