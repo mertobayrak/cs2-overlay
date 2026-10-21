@@ -1,0 +1,82 @@
+ModafenClientXZERO 0.4.0 - Windows x64
+
+1. Close the old CS2Overlay.exe before starting this version.
+2. Extract the archive and run ModafenClientXZERO.exe.
+3. Open CS2 in Fullscreen Windowed and join a match.
+4. The Dashboard shows connection and offset status. Switch to CS2.
+
+DEFAULT KEYS
+F8   Show/hide the green settings panel (F8 no longer quits).
+F6   Wallhack on/off.
+F5   Aimbot on/off. Hold Right Mouse while enabled.
+F4   Aim assist on/off. Hold Left Mouse while enabled.
+F7   Bunnyhop on/off. Hold physical Space; Jump must be bound to Space.
+F9   Scout-only spinbot on/off. Other weapons pause spin, auto-hop and fire.
+F12  Everything off.
+F10  Quit the client.
+
+All input automation starts off. Change keys on Keybinds, then Apply keybinds.
+NO KEYBINDS in Keybinds disables all client shortcuts except the menu key.
+The panel controls and feature hold activations remain available.
+If a key is already used by another application, use the panel controls.
+
+WALLHACK
+Disable Player boxes independently. Enable Skeleton / bones or Body silhouette
+from bones for red body styles. Choose colors, health, names, range and labels.
+Mark hostage carriers is toggleable. Radar with wallhack enables an external
+radar; orange dots identify hostage carriers when that data is available.
+
+FLASHBANG WHITE LIMIT
+Wallhack > Limit flashbang white enables Maximum flash opacity (0-255).
+180 is the default reduced setting; 0 is the minimum and 255 removes the cap.
+This changes the local player's flash-opacity field while enabled. Disabling,
+pausing, losing focus or closing attempts to restore the previous value.
+The option starts off and stays off when loading a profile. Sound is unchanged.
+
+BOMB + FOV CIRCLE
+Wallhack > Show planted bomb + defuse timers shows site A/B, a world marker,
+seconds until explosion, latest start times with/without a kit, and any active
+defuse countdown. This setting works with player wallhack off and while dead.
+With radar enabled, C4 appears as an orange square. Timers follow game time.
+
+Aimbot + assist > Show FOV circle (also when aim is off) controls the circle
+independently. Set Aim FOV radius and FOV circle color in the same page.
+Showing it does not enable aiming. F12 turns these new overlays off as well.
+
+AIM / SPIN
+Aimbot and assist have separate FOV, smoothing and activation controls.
+Aimbot recoil control and Recoil strength counter reported recoil while firing.
+Spin works only with SSG 08 equipped. Spinbot > Automatic chase camera follows
+your character from behind with a steady direction. Adjust Chase distance and
+Chase viewing pitch on Spinbot. It enters third person, then steady orbit mode.
+Enable the developer console and use a practice server
+with sv_cheats 1. Spin stops if the camera follows the turning view; fire
+waits until the camera is observed steady. Public servers can reject this
+camera command. Use Spinbot > Restore first person afterward.
+Spin targets spotted on-screen enemies, interrupting its rotation to aim.
+Auto-fire only clicks at a spotted enemy identified by the game crosshair.
+Input stops when CS2 loses focus or your local player is not alive.
+
+PRACTICE CAMERA
+Third person and FOV commands need a server with sv_cheats 1. These controls
+do not enable server cheats and public servers can reject them. FOV can be
+requested up to 200; the engine may clamp it. Enable the game developer
+console and select its actual key before Apply. Start with an empty prompt.
+Copy/export commands are also available. Applying pauses all automation.
+
+The Spinbot chase view uses the living player's practice camera, with no
+change to spectator status. It is not a public-server camera unlock. Restore
+first person also resets camera pitch bounds to 0/90 and max distance to 200.
+
+PERFORMANCE / PROFILES
+Refresh target defaults to 120 Hz; reduce it if CPU usage is high.
+The counter is client updates per second, not game FPS. Profiles save only
+when you select Save and load with input automation off.
+
+If attachment or offsets fail, read Dashboard diagnostics and Refresh offsets.
+Bone/model layouts can change with game updates. The silhouette follows
+bones; it is not a game-material replacement. Server-unavailable positions
+cannot be drawn.
+
+SHA256SUMS.txt and build-info.json identify this build. smoke-checks.json
+records offline checks. Live CS2 input and gameplay are not tested by CI.
