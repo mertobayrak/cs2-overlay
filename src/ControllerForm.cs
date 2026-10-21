@@ -37,6 +37,10 @@ namespace Cs2Overlay
         private bool closing, loading, syncing, cameraBusy;
         private bool lastSpinRequested, spinCameraReady, lastNoKeybinds;
         private int spinSetupEpoch;
+        private int spinCameraProcess;
+        private bool spinMayaRequested;
+        private bool lastSpinCameraAutomatic;
+        private int lastSpinDistance, lastSpinCameraPitch;
         private DateTime nextAttach = DateTime.MinValue, nextWindow = DateTime.MinValue, nextStatus = DateTime.MinValue;
         private long lastTick, cadenceStart;
         private int frames;
@@ -144,10 +148,14 @@ namespace Cs2Overlay
             card = Card("Spinbot", "Spinbot / Scout only", "Only active while the SSG 08 (Scout) is equipped. Spin, automatic jumping, targeting and fire all pause when you change weapon or weapon data is unavailable.");
             Risk(card, "HIGHER RISK", "Spinning, repeated jumping and automatic fire are conspicuous automation. There is no ban protection.", "risk.spin");
             Check(card, "SpinEnabled", "Enable spinbot"); Number(card, "SpinSpeed", "Spin speed (degrees/s)", 90, 3600, 90, 0); Number(card, "SpinPitch", "Look pitch (down = 89)", -89, 89, 1, 0);
-            Check(card, "SpinPracticeCamera", "Auto third-person Maya camera (practice)");
-            Note(card, "Requests CS2's Maya-style third-person camera. Requires the game console and sv_cheats on a practice server. Spin stops if the camera follows your turning view; fire waits for a steady camera.", 140);
             Check(card, "SpinJump", "Auto bunnyhop"); Check(card, "SpinTarget", "Aim at spotted on-screen enemies"); Check(card, "SpinShoot", "Auto-fire at crosshair enemy"); Number(card, "FireInterval", "Fire interval (ms)", 50, 1000, 10, 0);
             Note(card, "All spin inputs require a live local player and CS2 in the foreground. Opening the menu stops input immediately.", 75);
+            card = Card("Spinbot", "Chase camera", "A spectator-style view following your living character from behind. Its viewing direction stays steady while your Scout spins. Adjust distance and viewing pitch here.");
+            Check(card, "SpinPracticeCamera", "Automatic chase camera (practice)");
+            Number(card, "SpinCameraDistance", "Chase distance", 50, 400, 10, 0);
+            Number(card, "SpinCameraPitch", "Chase viewing pitch", -60, 60, 1, 0);
+            AddButton(card, "Restore first person (3 seconds)", async delegate { settings.ThirdPerson = settings.CustomFov = false; SyncControls(); await ApplyCamera(); });
+            Note(card, "Requires the developer console and a server allowing sv_cheats. Uses third person with steady orbit controls, rather than spectator status. Spin stops if the camera follows the turning view; fire waits for a steady camera.", 160);
 
             card = Card("Practice camera", "Third person + FOV", "Practice server only: thirdperson and fov_cs_debug require sv_cheats 1 on the server. Public servers can reject these commands. These controls do not enable server cheats.");
             Check(card, "ThirdPerson", "Third-person camera"); Number(card, "CameraDistance", "Third-person distance", 50, 400, 10, 0);
@@ -157,12 +165,6 @@ namespace Cs2Overlay
             AddButton(card, "Copy camera commands", delegate { Run(delegate { Clipboard.SetText(PracticeCamera.Command(settings)); Log("Camera commands copied."); }); });
             AddButton(card, "Export practice camera .cfg", delegate { ExportCamera(); });
             AddButton(card, "Restore first person + default FOV", async delegate { settings.ThirdPerson = settings.CustomFov = false; SyncControls(); await ApplyCamera(); });
-
-            card = Card("Practice camera", "Spectator chase camera", "The third-person chase view used by spectator controls. CS2 must already have you dead or spectating; this command does not turn a living player into a spectator or unlock cameras on a server.");
-            AddButton(card, "Spectator chase (3 second countdown)", async delegate { await ApplyCamera(PracticeCamera.SpectatorCommand(true)); });
-            AddButton(card, "First-person spectating (3 seconds)", async delegate { await ApplyCamera(PracticeCamera.SpectatorCommand(false)); });
-            AddButton(card, "Copy spectator chase command", delegate { Run(delegate { Clipboard.SetText(PracticeCamera.SpectatorCommand(true)); Log("Spectator chase command copied. Use while dead or spectating."); }); });
-            Note(card, "Uses spec_mode 5 for chase and spec_mode 4 for first person. Server spectator rules still apply. Alive Scout spin uses the separate steady practice camera on the Spinbot page.", 112);
 
             card = Card("Keybinds", "Global toggles", "Pick a unique key for every action, then select Apply keybinds. The main controls also work when a key is already used by another app.");
             Check(card, "NoKeybinds", "NO KEYBINDS (menu key only)");
@@ -302,9 +304,12 @@ namespace Cs2Overlay
                 lastNoKeybinds = settings.NoKeybinds;
                 if (!previewMode && IsHandleCreated) RegisterKeys();
             }
-            if (settings.SpinEnabled != lastSpinRequested)
+            if (settings.SpinEnabled != lastSpinRequested || settings.SpinPracticeCamera != lastSpinCameraAutomatic ||
+                settings.SpinCameraDistance != lastSpinDistance || settings.SpinCameraPitch != lastSpinCameraPitch)
             {
-                lastSpinRequested = settings.SpinEnabled; spinSetupEpoch++; spinCameraReady = false;
+                lastSpinRequested = settings.SpinEnabled; lastSpinCameraAutomatic = settings.SpinPracticeCamera;
+                lastSpinDistance = settings.SpinCameraDistance; lastSpinCameraPitch = settings.SpinCameraPitch;
+                spinSetupEpoch++; spinCameraReady = false;
                 spinCamera.Reset();
             }
         }
@@ -404,7 +409,7 @@ namespace Cs2Overlay
                 { settings.FlashLimitEnabled = false; flash.Disable(); SyncControls(); Log(error); }
             }
             else flash.Disable();
-            if (settings.SpinPracticeCamera && !spinCameraReady && InputPolicy.SpinAllowed(settings, frame)) { PrepareSpinCamera(); return; }
+            if (settings.SpinPracticeCamera && !spinCameraReady && InputPolicy.SpinAllowed(settings, frame)) { PrepareSpinCamera(frame); return; }
             try { solution = Automate(frame, bounds.Size, seconds, now); }
             catch (Win32Exception error) { settings.DisableInputs(); ResetAutomation(); SyncControls(); Log(error.Message); }
             frames++;
@@ -466,25 +471,26 @@ namespace Cs2Overlay
             if (settings.AimEnabled || settings.AssistEnabled) return AimEngine.Select(frame, settings, viewport, settings.AimEnabled ? 0 : 1, 0);
             return null;
         }
-        private async Task ApplyCamera(string spectatorCommand = null)
+        private async Task ApplyCamera()
         {
             if (cameraBusy || closing) return;
             if (!session.Attached) { Log("Open CS2 before applying camera commands."); return; }
             settings.DisableInputs(); SyncControls(); cameraBusy = true;
             try
             {
-                string command = spectatorCommand ?? PracticeCamera.Command(settings);
+                string command = (spinMayaRequested && spinCameraProcess == session.ProcessId ? PracticeCamera.SteadyChaseCommand + "; " : "") + PracticeCamera.Command(settings);
                 for (int i = 3; i >= 1; i--)
                 {
                     SetState("Switch to CS2. Applying camera in " + i + "..."); await Task.Delay(1000); if (closing) return;
                 }
                 await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command, delegate { return !closing; });
-                if (!closing) Log(spectatorCommand != null ? "Spectator camera requested. You must be dead or spectating, and the server must allow this view." : "Camera command sent. The server must allow sv_cheats; check the game console for its response.");
+                spinMayaRequested = false;
+                if (!closing) Log("Camera command sent. The server must allow sv_cheats; check the game console for its response.");
             }
             catch (Exception error) { if (!closing) { SetState(error.Message); Log(error.Message); } }
             finally { cameraBusy = false; }
         }
-        private async void PrepareSpinCamera()
+        private async void PrepareSpinCamera(Frame frame)
         {
             if (cameraBusy || !session.Attached || closing)
             {
@@ -494,7 +500,9 @@ namespace Cs2Overlay
             Func<bool> permitted = delegate { return !closing && settings.SpinEnabled && spinSetupEpoch == epoch; };
             try
             {
-                string command = PracticeCamera.SpinCommand(settings);
+                if (spinCameraProcess != session.ProcessId) { spinCameraProcess = session.ProcessId; spinMayaRequested = false; }
+                string command = (spinMayaRequested ? PracticeCamera.SteadyChaseCommand + "; " : "") + PracticeCamera.SpinCommand(settings, frame.Pitch);
+                spinMayaRequested = false;
                 if (Native.GetForegroundWindow() != session.Window)
                 {
                     for (int i = 3; i >= 1; i--)
@@ -503,8 +511,9 @@ namespace Cs2Overlay
                         if (!permitted()) throw new OperationCanceledException();
                     }
                 }
-                await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command, permitted);
-                if (permitted()) { spinCameraReady = true; Log("Maya-style third-person camera requested. Server acceptance is unverified; spin is restricted to SSG 08."); }
+                await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command, permitted, PracticeCamera.SteadyChaseCommand);
+                spinMayaRequested = true;
+                if (permitted()) { spinCameraReady = true; Log("Scout chase camera requested. Checking that its direction stays steady while your character turns."); }
             }
             catch (OperationCanceledException) { }
             catch (Exception error)

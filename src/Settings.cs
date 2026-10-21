@@ -70,6 +70,8 @@ namespace Cs2Overlay
         public bool GroundOnly { get; set; }
         public bool SpinEnabled { get; set; }
         public bool SpinPracticeCamera { get; set; }
+        public int SpinCameraDistance { get; set; }
+        public int SpinCameraPitch { get; set; }
         public int SpinSpeed { get; set; }
         public int SpinPitch { get; set; }
         public bool SpinJump { get; set; }
@@ -105,6 +107,7 @@ namespace Cs2Overlay
             CrosshairSize = 6; CrosshairGap = 4; CrosshairColor = Color.LimeGreen.ToArgb();
             AimKey = (int)Keys.RButton; AimRadius = 140; DrawFov = true; AimSmoothMs = 120;
             RecoilControl = true; RecoilStrength = 1m; SpinPracticeCamera = true;
+            SpinCameraDistance = 150; SpinCameraPitch = 12;
             Sensitivity = 1m; AutoSensitivity = true; AimDistance = 200; TargetLock = true;
             AimMaxStep = 100; AimDeadzone = 2; TargetIndicator = true; FovColor = Color.LimeGreen.ToArgb();
             AimVisibleOnly = true; AssistKey = (int)Keys.LButton; AssistRadius = 45; AssistSmoothMs = 220; AssistStrength = 0.35m;
@@ -130,6 +133,7 @@ namespace Cs2Overlay
             AssistStrength = Math.Max(0.05m, Math.Min(1m, AssistStrength)); JumpInterval = Limit(JumpInterval, 10, 150);
             RecoilStrength = Math.Max(0m, Math.Min(2m, RecoilStrength));
             SpinSpeed = Limit(SpinSpeed, 90, 3600); SpinPitch = Limit(SpinPitch, -89, 89); FireInterval = Limit(FireInterval, 50, 1000);
+            SpinCameraDistance = Limit(SpinCameraDistance, 50, 400); SpinCameraPitch = Limit(SpinCameraPitch, -60, 60);
             CameraFov = Limit(CameraFov, 54, 200); CameraDistance = Limit(CameraDistance, 50, 400);
             RefreshHz = Limit(RefreshHz, 30, 240); IdleHz = Limit(IdleHz, 2, 30);
             if (!KeyOptions.IsActivation(AimKey)) AimKey = (int)Keys.RButton;
@@ -191,17 +195,21 @@ namespace Cs2Overlay
 
     internal static class PracticeCamera
     {
-        internal static string SpectatorCommand(bool thirdPerson) { return thirdPerson ? "spec_mode 5" : "spec_mode 4"; }
-        internal static string SpinCommand(AppSettings settings)
+        internal const string SteadyChaseCommand = "thirdperson_mayamode";
+        internal static string SpinCommand(AppSettings settings, float playerPitch)
         {
             settings.Validate();
-            return "thirdperson_mayamode; cam_snapto 1; cam_idealdist " + settings.CameraDistance.ToString(CultureInfo.InvariantCulture) +
+            // Enter third person first. Maya mode is a separate toggle, applied after
+            // the chase camera has settled; it keeps camera direction independent.
+            float pitchOffset = settings.SpinCameraPitch - (Projection.Finite(playerPitch) ? playerPitch : 0);
+            return "thirdperson; cam_collision 1; cam_snapto 1; c_minpitch -180; c_maxpitch 180; c_maxdistance 400; cam_idealyaw 0; cam_idealpitch " + pitchOffset.ToString("0.##", CultureInfo.InvariantCulture) +
+                "; cam_idealdist " + settings.SpinCameraDistance.ToString(CultureInfo.InvariantCulture) +
                 "; fov_cs_debug " + (settings.CustomFov ? settings.CameraFov.ToString(CultureInfo.InvariantCulture) : "0");
         }
         internal static string Command(AppSettings settings)
         {
             settings.Validate();
-            return (settings.ThirdPerson ? "thirdperson; cam_idealdist " + settings.CameraDistance.ToString(CultureInfo.InvariantCulture) : "firstperson") +
+            return (settings.ThirdPerson ? "thirdperson; cam_idealdist " + settings.CameraDistance.ToString(CultureInfo.InvariantCulture) : "firstperson; c_minpitch 0; c_maxpitch 90; c_maxdistance 200") +
                 "; fov_cs_debug " + (settings.CustomFov ? settings.CameraFov.ToString(CultureInfo.InvariantCulture) : "0");
         }
         internal static string Config(AppSettings settings)

@@ -173,7 +173,7 @@ namespace Cs2Overlay
             for (int i = 0; i < text.Length; i++) { events[i * 2] = Key(0, text[i], 4); events[i * 2 + 1] = Key(0, text[i], 6); }
             Emit(window, events);
         }
-        internal static async Task CameraCommand(IntPtr window, int consoleKey, string command, Func<bool> permitted = null)
+        internal static async Task CameraCommand(IntPtr window, int consoleKey, string command, Func<bool> permitted = null, string afterSettle = null)
         {
             if (permitted != null && !permitted()) throw new OperationCanceledException();
             if (Native.GetForegroundWindow() != window) throw new InvalidOperationException("Switch to CS2 before the countdown ends.");
@@ -182,6 +182,12 @@ namespace Cs2Overlay
             if (Native.GetForegroundWindow() != window) throw new InvalidOperationException("Camera command stopped because CS2 lost focus.");
             Text(window, command); Press(window, (int)Keys.Enter); await Task.Delay(120);
             if (permitted != null && !permitted()) throw new OperationCanceledException();
+            if (afterSettle != null)
+            {
+                if (Native.GetForegroundWindow() != window) throw new InvalidOperationException("Camera setup stopped because CS2 lost focus.");
+                Text(window, afterSettle); Press(window, (int)Keys.Enter); await Task.Delay(120);
+                if (permitted != null && !permitted()) throw new OperationCanceledException();
+            }
             if (Native.GetForegroundWindow() == window) Press(window, consoleKey);
         }
     }

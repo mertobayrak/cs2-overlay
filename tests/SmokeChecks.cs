@@ -123,7 +123,7 @@ namespace Cs2Overlay
             string command = PracticeCamera.Command(restored);
             Require(command.Contains("thirdperson") && command.Contains("fov_cs_debug 200") && !command.Contains("sv_cheats"), "Camera commands request the configured view without enabling server cheats");
             restored.ThirdPerson = restored.CustomFov = false;
-            Require(PracticeCamera.Command(restored) == "firstperson; fov_cs_debug 0", "Camera restore requests first person and default FOV");
+            Require(PracticeCamera.Command(restored) == "firstperson; c_minpitch 0; c_maxpitch 90; c_maxdistance 200; fov_cs_debug 0", "Camera restore requests first person, default camera bounds and default FOV");
             bool rejected = false; restored.EspBind = restored.MenuBind;
             try { restored.Validate(); } catch (InvalidDataException) { rejected = true; }
             Require(rejected, "Duplicate global keybinds are rejected");
@@ -183,10 +183,14 @@ namespace Cs2Overlay
             frame.WeaponDefinition = 9; Require(!InputPolicy.SpinAllowed(settings, frame), "Scout spin is inactive with an AWP or other weapon");
             frame.WeaponDefinition = WeaponReader.Scout; frame.WeaponKnown = false;
             Require(!InputPolicy.SpinAllowed(settings, frame), "Unknown weapon data cannot activate spin");
-            string command = PracticeCamera.SpinCommand(settings);
-            Require(command.Contains("thirdperson_mayamode") && command.Contains("cam_snapto 1") && !command.Contains("sv_cheats"), "Spin requests the built-in Maya camera without enabling server cheats");
-            Require(PracticeCamera.SpectatorCommand(true) == "spec_mode 5" && PracticeCamera.SpectatorCommand(false) == "spec_mode 4",
-                "Spectator buttons request the built-in chase and first-person modes without modifying server rules");
+            string command = PracticeCamera.SpinCommand(settings, -20);
+            Require(command.StartsWith("thirdperson;") && command.Contains("cam_idealdist 150") && command.Contains("cam_collision 1") && command.Contains("cam_idealpitch 32") && command.Contains("c_minpitch -180") && !command.Contains("sv_cheats"),
+                "Spin enters third person with chase distance, collision and pitch independent of the player's look angle");
+            Require(PracticeCamera.SteadyChaseCommand == "thirdperson_mayamode" && !command.Contains("thirdperson_mayamode"),
+                "Steady orbit is a separate stage after the chase camera settles");
+            settings.SpinCameraDistance = 999; settings.SpinCameraPitch = -999; settings.Validate();
+            Require(settings.SpinCameraDistance == 400 && settings.SpinCameraPitch == -60,
+                "Spin chase distance and pitch are bounded independently of the spin look-down pitch");
             bool cancelled = false;
             try { InputSender.CameraCommand(IntPtr.Zero, 0, "thirdperson", delegate { return false; }).GetAwaiter().GetResult(); }
             catch (OperationCanceledException) { cancelled = true; }

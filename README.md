@@ -1,6 +1,6 @@
 # ModafenClientXZERO
 
-A Windows x64 CS2 external client with a green, eight-page control panel and 85 configurable settings. The source builds into one executable using Microsoft .NET Framework assemblies, with no third-party packages.
+A Windows x64 CS2 external client with a green, eight-page control panel and 87 configurable settings. The source builds into one executable using Microsoft .NET Framework assemblies, with no third-party packages.
 
 ## Download and start
 
@@ -27,7 +27,7 @@ Change keys on **Keybinds**, then select **Apply keybinds**. Each toggle needs a
 - **Wallhack:** independent full/corner boxes, skeleton lines and a red bone silhouette; health, distance, names, snaplines, teammate filters, colors, line thickness and range. Hostage carriers can be marked using the carried-hostage handle. The optional radar is an external radar overlay linked to wallhack, not a modification of CS2's native radar.
 - **Aimbot + assist:** hold-key targeting, pixel FOV, head/chest/pelvis points, time-based smoothing, deadzone, mouse-step limit, target priority/lock, distance, spotted filtering, sensitivity and target indicators. Aim assist has its own smaller FOV, smoothing, key and strength. The page shows the requested **RISK** notice.
 - **Movement:** hold-Space jump repetition with configurable interval and optional ground-only gate. CS2 Jump must be bound to Space.
-- **Spinbot:** SSG 08 (Scout) only; spin speed and look-down pitch, optional automatic jumping, spotted on-screen targeting and fire interval. Targeting interrupts spinning while an eligible enemy is on screen. Auto-fire only clicks when CS2's crosshair entity identifies a spotted enemy; merely projecting an enemy onto the screen does not trigger a shot. The page shows **HIGHER RISK**. Spin activates only while a live local player has the SSG 08 equipped. Optional automatic practice camera setup requests thirdperson_mayamode, then monitors the rendered camera versus player angles. Spin stops if the camera follows the view or camera data is unavailable; firing waits until the camera is observed staying steady. The command requires a practice server allowing cheats. A public server may reject it, and no public-server camera bypass is provided. Use Practice camera to restore first person afterward.
+- **Spinbot:** SSG 08 (Scout) only; spin speed and look-down pitch, optional automatic jumping, spotted on-screen targeting and fire interval. Targeting interrupts spinning while an eligible enemy is on screen. Auto-fire only clicks when CS2's crosshair entity identifies a spotted enemy; merely projecting an enemy onto the screen does not trigger a shot. The page shows **HIGHER RISK**. Spin activates only while a live local player has the SSG 08 equipped. The automatic chase camera follows your character from behind with a steady viewing direction. Its distance and viewing pitch are separate controls on Spinbot. Setup first requests third person and the chase offsets, waits for them to settle, then enables Maya orbit controls. The client monitors the rendered camera versus player angles. Spin stops if the camera follows the view or camera data is unavailable; firing waits until the camera is observed staying steady. The command requires a practice server allowing cheats. A public server may reject it, and no public-server camera bypass is provided. Use Restore first person in Spinbot to leave the chase camera afterward.
 - **Practice camera:** third person, camera distance and FOV requests up to 200. These use console commands and require a server with **sv_cheats 1**. Public servers can reject them, and the engine may clamp FOV. The client does not enable server cheats. Enable CS2's developer console, select its key, and use the 3-second Apply button with an empty prompt, or copy/export the commands. Applying pauses automation.
 - **Keybinds:** eight configurable global actions. **NO KEYBINDS** immediately unregisters and ignores all client action shortcuts except the menu key. Feature activation controls such as holding Space or a mouse button still work after a feature is enabled in the panel.
 - **Profiles:** three manually saved local profiles and reset. Loading a profile leaves all input automation disabled until toggled on. No profile autoloads at startup.
@@ -56,9 +56,13 @@ On **Aimbot + assist**, **Show FOV circle (also when aim is off)** controls the 
 
 The green client uses a rounded custom window, rounded cards and buttons, subtle outlines, dark selectors, hover highlights and native resize/drag support. Minimize, maximize and close controls are in the upper right.
 
-## Spectator chase camera
+## Spinbot chase camera
 
-On **Practice camera**, the **Spectator chase** button requests `spec_mode 5`, the third-person player-follow view used by spectator controls. **First-person spectating** requests `spec_mode 4`. Both use the same console-key countdown and pause automation. CS2 must already have you dead or spectating, and the server must permit the view. This does not give a living player spectator privileges. The separate live Scout spin camera still uses the steady Maya practice camera.
+On **Spinbot**, enable **Automatic chase camera (practice)**. This follows your living character from behind like a spectator chase view, while keeping the viewing direction separate from the character's spin. **Chase distance** defaults to 150 and **Chase viewing pitch** to 12 degrees. The camera direction starts behind your current heading; it does not turn with the spinning player's view. Changing those settings reinitializes the camera when you return to CS2 with the Scout equipped.
+
+This uses CS2's third-person camera and steady orbit controls on a practice server, and requires server permission for cheats. It does not change spectator status or send spec_mode. Spin stops if the rendered camera follows the turning player, and targeting/fire wait until a steady direction is observed. Exact live camera behavior remains unverified by offline tests.
+
+The setup changes camera pitch bounds to -180/180 and maximum distance to 400 so the requested offset can be applied even when the player is looking down. **Restore first person** pauses automation, leaves the requested steady orbit mode and restores first person, default FOV, pitch bounds 0/90 and maximum distance 200. These are engine defaults, not a snapshot of earlier custom console values. Camera commands use the configured developer-console key.
 
 ## Smoother updates
 
