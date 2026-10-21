@@ -327,6 +327,9 @@ namespace Cs2Overlay
                     "NO KEYBINDS disables action selectors and preserves the menu key");
                 Require(form.FormBorderStyle == FormBorderStyle.None && form.Region != null,
                     "The custom client window has rounded geometry and custom window controls");
+                Control closeButton = form.Controls.Find("window.Close", true)[0];
+                Require(closeButton.Parent.ClientRectangle.Contains(closeButton.Bounds) && closeButton.Parent.Parent.ClientRectangle.Contains(closeButton.Parent.Bounds),
+                    "The complete close button remains inside the visible header");
                 string directory = Path.Combine(Path.GetDirectoryName(output), "previews"); Directory.CreateDirectory(directory);
                 foreach (string page in new string[] { "Dashboard", "Wallhack", "Aimbot + assist", "Spinbot", "Practice camera", "Keybinds" })
                 {

@@ -75,13 +75,17 @@ namespace Cs2Overlay
             title = new Label { Dock = DockStyle.Top, Height = 40, Text = "Dashboard", Font = new Font("Segoe UI", 21f, FontStyle.Bold), ForeColor = Green };
             state = new Label { Dock = DockStyle.Bottom, Height = 30, Text = "Starting...", ForeColor = Muted, AutoEllipsis = true };
             header.Controls.Add(state); header.Controls.Add(title);
-            FlowLayoutPanel windowButtons = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 124, Height = 32, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, BackColor = BackColor };
+            FlowLayoutPanel windowButtons = new FlowLayoutPanel { Width = 124, Height = 32, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, BackColor = BackColor };
             Button minimize = NewButton("—", 36), maximize = NewButton("□", 36), close = NewButton("×", 36);
             minimize.Height = maximize.Height = close.Height = 28;
+            minimize.Margin = maximize.Margin = close.Margin = new Padding(2);
+            minimize.Name = "window.Minimize"; maximize.Name = "window.Maximize"; close.Name = "window.Close";
             minimize.Click += delegate { WindowState = FormWindowState.Minimized; };
             maximize.Click += delegate { WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; };
             close.Click += delegate { Close(); };
             windowButtons.Controls.Add(minimize); windowButtons.Controls.Add(maximize); windowButtons.Controls.Add(close); header.Controls.Add(windowButtons); windowButtons.BringToFront();
+            Action placeWindowButtons = delegate { windowButtons.Location = new Point(Math.Max(header.Padding.Left, header.ClientSize.Width - header.Padding.Right - windowButtons.Width), header.Padding.Top); };
+            header.Resize += delegate { placeWindowButtons(); }; placeWindowButtons();
             title.MouseDown += DragWindow; header.MouseDown += DragWindow; brand.MouseDown += DragWindow;
             host = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty }; root.Controls.Add(host, 1, 1);
             footer = new Label { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(20, 8, 0, 0), Font = new Font("Segoe UI", 9f), ForeColor = Green, BackColor = Color.FromArgb(5, 18, 11) };

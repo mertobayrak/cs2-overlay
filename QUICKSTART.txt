@@ -48,7 +48,8 @@ Aimbot and assist have separate FOV, smoothing and activation controls.
 Aimbot recoil control and Recoil strength counter reported recoil while firing.
 Spin works only with SSG 08 equipped. Spinbot > Automatic chase camera follows
 your character from behind with a steady direction. Adjust Chase distance and
-Chase viewing pitch on Spinbot. It enters third person, then steady orbit mode. Enable the developer console and use a practice server
+Chase viewing pitch on Spinbot. It enters third person, then steady orbit mode.
+Enable the developer console and use a practice server
 with sv_cheats 1. Spin stops if the camera follows the turning view; fire
 waits until the camera is observed steady. Public servers can reject this
 camera command. Use Spinbot > Restore first person afterward.
