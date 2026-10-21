@@ -31,7 +31,7 @@ Copy-Item -LiteralPath (Join-Path $taskRoot 'QUICKSTART.txt') -Destination $Outp
 $taskHash = Get-FileHash -LiteralPath $taskExecutable -Algorithm SHA256
 ($taskHash.Hash.ToLowerInvariant() + '  ModafenClientXZERO.exe') | Set-Content -LiteralPath (Join-Path $OutputDirectory 'SHA256SUMS.txt') -Encoding ascii
 [ordered]@{
-    version = '0.3.0'
+    version = '0.4.0'
     source_commit = $env:GITHUB_SHA
     built_at_utc = [DateTime]::UtcNow.ToString('o')
     compiler_version = (Get-Item -LiteralPath $taskCompiler).VersionInfo.FileVersion

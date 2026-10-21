@@ -128,6 +128,170 @@ namespace Cs2Overlay
             try { restored.Validate(); } catch (InvalidDataException) { rejected = true; }
             Require(rejected, "Duplicate global keybinds are rejected");
         }
+        private static void Put(byte[] data, int offset, byte[] value) { Buffer.BlockCopy(value, 0, data, offset, value.Length); }
+        private static void FlashChecks()
+        {
+            byte[] data = new byte[512]; GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                long address = pin.AddrOfPinnedObject().ToInt64(), pawn = address + 128;
+                Put(data, 0, BitConverter.GetBytes(pawn)); Put(data, 144, BitConverter.GetBytes(255f));
+                int process = Process.GetCurrentProcess().Id; string error;
+                using (FlashLimiter flash = new FlashLimiter())
+                {
+                    Require(flash.Apply(process, pawn, address, 16, 100, out error) && BitConverter.ToSingle(data, 144) == 100,
+                        "Flash limit writes the selected opacity in the test process only");
+                    Require(flash.Apply(process, pawn, address, 16, 180, out error) && BitConverter.ToSingle(data, 144) == 180,
+                        "Raising the flash limit retains the original opacity for restoration");
+                    flash.Disable();
+                    Require(BitConverter.ToSingle(data, 144) == 255, "Disabling flash limit restores its own previous value");
+                    Put(data, 144, BitConverter.GetBytes(70f));
+                    Require(flash.Apply(process, pawn, address, 16, 100, out error) && BitConverter.ToSingle(data, 144) == 70,
+                        "Flash limit never increases an externally lower opacity");
+                    flash.Disable(); Put(data, 144, BitConverter.GetBytes(255f));
+                    flash.Apply(process, pawn, address, 16, 100, out error); Put(data, 144, BitConverter.GetBytes(80f)); flash.Disable();
+                    Require(BitConverter.ToSingle(data, 144) == 80, "Flash restoration preserves a value changed by the engine or another owner");
+                    Put(data, 144, BitConverter.GetBytes(255f)); flash.Apply(process, pawn, address, 16, 0, out error);
+                    Require(BitConverter.ToSingle(data, 144) == 0, "Zero is accepted as the minimum flash-white limit");
+                    Require(flash.Apply(process, pawn, address, 16, 255, out error) && BitConverter.ToSingle(data, 144) == 255,
+                        "The normal-strength setting restores and releases the flash writer");
+                    flash.Apply(process, pawn, address, 16, 100, out error); Put(data, 0, BitConverter.GetBytes(pawn + 32)); flash.Disable();
+                    Require(BitConverter.ToSingle(data, 144) == 100, "A replaced local pawn prevents stale flash restoration writes");
+                    Put(data, 0, BitConverter.GetBytes(pawn)); Put(data, 144, BitConverter.GetBytes(Single.NaN));
+                    Require(!flash.Apply(process, pawn, address, 16, 100, out error), "Invalid flash data disables the writer without a write");
+                    Require(!flash.Apply(process, pawn, address, 0, 100, out error), "Missing flash offsets fail before opening write access");
+                }
+                AppSettings saved = Profiles.Decode(Profiles.Encode(new AppSettings { FlashLimitEnabled = true, FlashWhiteLimit = -10 }));
+                Require(!saved.FlashLimitEnabled && saved.FlashWhiteLimit == 0, "Profiles clamp flash opacity and reload with the memory-writing option off");
+            }
+            finally { pin.Free(); }
+        }
+        private static void NewFeatureChecks()
+        {
+            AppSettings settings = new AppSettings { EspEnabled = false, Hud = false, Crosshair = false, DrawFov = true };
+            Require(!settings.AimEnabled && !settings.AssistEnabled && OverlayOptions.ShouldDraw(settings), "The FOV circle keeps the overlay visible while all aim input is off");
+            settings.DrawFov = false; settings.BombInfo = true;
+            Require(OverlayOptions.ShouldDraw(settings), "Bomb information can display while player wallhack is off");
+            settings.BombInfo = false; Require(!OverlayOptions.ShouldDraw(settings), "Disabling the new displays permits the overlay to hide");
+            settings.NoKeybinds = true; bool allBlocked = true;
+            foreach (int id in new int[] { Native.ToggleHotkey, Native.AimHotkey, Native.AssistHotkey, Native.JumpHotkey, Native.SpinHotkey, Native.QuitHotkey, Native.PanicHotkey })
+                if (KeyOptions.ActionEnabled(settings, id)) allBlocked = false;
+            Require(allBlocked && KeyOptions.ActionEnabled(settings, Native.MenuHotkey), "NO KEYBINDS permits only the menu action, including queued shortcuts");
+            settings.SpinEnabled = true;
+            Frame frame = new Frame { Alive = true, WeaponKnown = true, WeaponDefinition = WeaponReader.Scout };
+            Require(InputPolicy.SpinAllowed(settings, frame), "Scout spin is eligible with a live SSG 08 equipped");
+            frame.WeaponDefinition = 9; Require(!InputPolicy.SpinAllowed(settings, frame), "Scout spin is inactive with an AWP or other weapon");
+            frame.WeaponDefinition = WeaponReader.Scout; frame.WeaponKnown = false;
+            Require(!InputPolicy.SpinAllowed(settings, frame), "Unknown weapon data cannot activate spin");
+            string command = PracticeCamera.SpinCommand(settings);
+            Require(command.Contains("thirdperson_mayamode") && command.Contains("cam_snapto 1") && !command.Contains("sv_cheats"), "Spin requests the built-in Maya camera without enabling server cheats");
+            bool cancelled = false;
+            try { InputSender.CameraCommand(IntPtr.Zero, 0, "thirdperson", delegate { return false; }).GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { cancelled = true; }
+            Require(cancelled, "Cancelled camera preparation stops before submitting any native input");
+            SpinCameraMonitor camera = new SpinCameraMonitor();
+            Frame cameraFrame = new Frame { AnglesValid = true, Matrix = new float[16] }; cameraFrame.Matrix[12] = 1;
+            Require(camera.Observe(cameraFrame) == SpinCameraState.Pending, "Camera verification starts without assuming the console command succeeded");
+            cameraFrame.Yaw = 40;
+            Require(camera.Observe(cameraFrame) == SpinCameraState.Steady && camera.Verified, "A stationary rendered camera is distinguished from a turning player");
+            camera.Reset(); cameraFrame.Yaw = 0; cameraFrame.Matrix[12] = 1; cameraFrame.Matrix[13] = 0; camera.Observe(cameraFrame);
+            cameraFrame.Yaw = 40; cameraFrame.Matrix[12] = (float)Math.Cos(40 * Math.PI / 180); cameraFrame.Matrix[13] = (float)Math.Sin(40 * Math.PI / 180);
+            Require(camera.Observe(cameraFrame) == SpinCameraState.FollowingView, "A camera that spins with the view is rejected instead of silently accepted");
+
+            byte[] data = new byte[4096]; GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                long address = pin.AddrOfPinnedObject().ToInt64();
+                Offsets o = new Offsets { PlantedC4 = 0x100, GlobalVars = 0x108, SceneNode = 0x20, Origin = 0x10,
+                    BombTicking = 0x80, BombSite = 0x84, BombBlowTime = 0x88, BombTimerLength = 0x8C,
+                    BombDefusing = 0x90, BombDefuseLength = 0x94, BombDefuseEnd = 0x98, BombDefused = 0x9C, BombExploded = 0x9D, BombCannotDefuse = 0x9E };
+                Put(data, 0x100, BitConverter.GetBytes(address + 0x180)); Put(data, 0x180, BitConverter.GetBytes(address + 0x200));
+                Put(data, 0x108, BitConverter.GetBytes(address + 0x600)); Put(data, 0x630, BitConverter.GetBytes(100f));
+                Put(data, 0x220, BitConverter.GetBytes(address + 0x500)); Put(data, 0x510, BitConverter.GetBytes(100f)); Put(data, 0x514, BitConverter.GetBytes(200f));
+                data[0x280] = 1; Put(data, 0x284, BitConverter.GetBytes(1)); Put(data, 0x288, BitConverter.GetBytes(130f)); Put(data, 0x28C, BitConverter.GetBytes(40f));
+                using (MemoryReader memory = OwnMemory())
+                {
+                    BombSnapshot bomb = BombReader.Read(memory, address, o);
+                    Require(bomb != null && bomb.Site == "B" && bomb.PositionValid && bomb.Position.X == 100 && bomb.TimerKnown && bomb.SecondsLeft == 30, "Native planted-C4 reads resolve the site, location and game-clock countdown");
+                    Require(bomb.LatestStart(true) == 25 && bomb.LatestStart(false) == 20, "Kit and normal defuse budgets use five and ten seconds");
+                    Put(data, 0x630, BitConverter.GetBytes(100f));
+                    Require(BombReader.Read(memory, address, o).SecondsLeft == 30, "A paused game clock leaves the bomb countdown unchanged");
+                    Put(data, 0x630, BitConverter.GetBytes(102f)); bomb = BombReader.Read(memory, address, o);
+                    Require(bomb.SecondsLeft == 28, "Bomb countdown advances using game time rather than desktop time");
+                    data[0x290] = 1; Put(data, 0x294, BitConverter.GetBytes(5f)); Put(data, 0x298, BitConverter.GetBytes(106f));
+                    bomb = BombReader.Read(memory, address, o);
+                    Require(bomb.DefuseTimerKnown && bomb.DefuseSeconds == 4 && bomb.DefuseInTime, "An active defuse has a separate four-second countdown and completion result");
+                    Put(data, 0x288, BitConverter.GetBytes(104f)); bomb = BombReader.Read(memory, address, o);
+                    Require(!bomb.DefuseInTime && bomb.StartLabel(true) == "too late", "An impossible defuse is marked too late");
+                    Put(data, 0x630, BitConverter.GetBytes(Single.NaN)); bomb = BombReader.Read(memory, address, o);
+                    Require(bomb.PositionValid && !bomb.TimerKnown && !bomb.DefuseTimerKnown, "An invalid game clock cannot produce a fabricated countdown");
+                    data[0x280] = 0; data[0x29C] = 1; bomb = BombReader.Read(memory, address, o);
+                    Require(bomb.Phase == BombPhase.Defused, "Defused bombs are identified as finished");
+                    data[0x29C] = 0; data[0x29D] = 1; Require(BombReader.Read(memory, address, o).Phase == BombPhase.Exploded, "Exploded bombs are identified as finished");
+                    data[0x29D] = 0; Require(BombReader.Read(memory, address, o) == null, "An inactive C4 does not produce a planted-bomb marker");
+                    data[0x280] = 1; Put(data, 0x100, BitConverter.GetBytes(address + 0x200));
+                    Require(BombReader.Read(memory, address, o) != null, "Validated direct planted-C4 pointers are supported");
+                }
+            }
+            finally { pin.Free(); }
+            data = new byte[65536]; pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                long address = pin.AddrOfPinnedObject().ToInt64();
+                Offsets o = new Offsets { WeaponServices = 0x10, ActiveWeapon = 0x20, AttributeManager = 0x10, Item = 0x10, ItemDefinition = 2,
+                    ShotsFired = 0x30, AimPunchServices = 0x38, PredictablePunch = 0x20 };
+                Put(data, 0x10, BitConverter.GetBytes(address + 0x100)); Put(data, 0x100 + 2 * 0x78, BitConverter.GetBytes(address + 0xF600));
+                Put(data, 0xF210, BitConverter.GetBytes(address + 0xF400)); Put(data, 0xF420, BitConverter.GetBytes(2));
+                Put(data, 0xF622, BitConverter.GetBytes((ushort)WeaponReader.Scout));
+                Put(data, 0xF230, BitConverter.GetBytes(5)); Put(data, 0xF238, BitConverter.GetBytes(address + 0xF800));
+                Put(data, 0xF820, BitConverter.GetBytes(-2f)); Put(data, 0xF824, BitConverter.GetBytes(0.5f));
+                using (MemoryReader memory = OwnMemory())
+                {
+                    EntityPages pages = new EntityPages(memory); pages.BeginFrame(address); ushort definition;
+                    Require(WeaponReader.Read(memory, pages, address + 0xF200, o, 0x78, out definition) && definition == WeaponReader.Scout, "The active-weapon handle resolves a native SSG 08 item definition");
+                    frame = new Frame { Alive = true }; RecoilReader.Read(memory, address + 0xF200, o, frame);
+                    Require(frame.PunchKnown && frame.ShotsFired == 5 && frame.Punch.X == -2 && frame.Punch.Y == 0.5f, "Recoil reads use the current AimPunchServices component");
+                    Put(data, 0xF820, BitConverter.GetBytes(Single.NaN)); Frame invalid = new Frame(); RecoilReader.Read(memory, address + 0xF200, o, invalid);
+                    Require(!invalid.PunchKnown, "Non-finite recoil data is rejected");
+                }
+            }
+            finally { pin.Free(); }
+            settings = new AppSettings { AimMaxStep = 500 };
+            RecoilCompensation correction = new RecoilCompensation();
+            Point move = correction.Step(frame, settings, true, true);
+            Require(move.Y > 0 && move.X > 0, "Recoil compensation pulls downward and counters horizontal kick");
+            Require(correction.Step(frame, settings, true, true) == Point.Empty, "Stable recoil does not cause repeated extra correction");
+            Require(correction.Step(frame, settings, false, true) == Point.Empty, "Recoil correction stops when firing stops");
+            settings.RecoilControl = false; Require(correction.Step(frame, settings, true, true) == Point.Empty, "The recoil toggle disables mouse compensation");
+            AppSettings saved = Profiles.Decode(Profiles.Encode(new AppSettings { BombInfo = true, NoKeybinds = true, RecoilStrength = 0.5m }));
+            Require(saved.BombInfo && saved.NoKeybinds && saved.RecoilStrength == 0.5m && !saved.SpinEnabled, "Profiles retain new visual, keybind and recoil settings with automation off");
+        }
+        private static void OverlayChecks(string directory)
+        {
+            AppSettings settings = new AppSettings { EspEnabled = false, Hud = false, Crosshair = false, DrawFov = true, Antialias = false };
+            Frame frame = new Frame { Matrix = new float[] {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1} };
+            using (OverlayForm overlay = new OverlayForm())
+            {
+                overlay.Present(frame, new Rectangle(0,0,640,480), settings, null, "preview"); Application.DoEvents();
+                using (Bitmap screenshot = new Bitmap(640,480))
+                {
+                    overlay.DrawToBitmap(screenshot, new Rectangle(0,0,640,480)); bool ring = false;
+                    for (int x = 457; x <= 463; x++) { Color pixel = screenshot.GetPixel(x, 240); if (pixel.G > pixel.R && pixel.G > pixel.B) ring = true; }
+                    Require(ring, "The renderer draws the FOV circle with aim and assist disabled");
+                    screenshot.Save(Path.Combine(directory, "FOV-circle.png"), ImageFormat.Png);
+                }
+                settings.DrawFov = false; settings.BombInfo = true;
+                frame.Bomb = new BombSnapshot { Phase = BombPhase.Planted, Site = "B", PositionValid = true, Position = new Vec3(0.5f,0,0),
+                    TimerKnown = true, SecondsLeft = 23.4f, TimerLength = 40, BeingDefused = true, DefuseTimerKnown = true, DefuseSeconds = 3.2f, DefuseInTime = true };
+                overlay.Present(frame, new Rectangle(0,0,640,480), settings, null, "preview"); Application.DoEvents();
+                using (Bitmap screenshot = new Bitmap(640,480))
+                {
+                    overlay.DrawToBitmap(screenshot, new Rectangle(0,0,640,480));
+                    Require(screenshot.GetPixel(320,100).ToArgb() == Color.Black.ToArgb(), "Bomb information renders without a live player or player wallhack");
+                    screenshot.Save(Path.Combine(directory, "Bomb-timer.png"), ImageFormat.Png);
+                }
+            }
+        }
         private static void UiChecks(string output)
         {
             using (ControllerForm form = new ControllerForm(true))
@@ -135,7 +299,7 @@ namespace Cs2Overlay
                 Require(form.Text == "ModafenClientXZERO" && form.PageCount == 8, "The branded green client initializes all eight pages offline");
                 HashSet<string> bound = new HashSet<string>(form.BoundSettings); bool complete = true;
                 foreach (PropertyInfo property in typeof(AppSettings).GetProperties()) if (!bound.Contains(property.Name)) complete = false;
-                Require(complete && bound.Count >= 30, "Every exposed setting has a GUI control (78 controls)");
+                Require(complete && bound.Count >= 30, "Every exposed setting has a GUI control");
                 form.Show(); Application.DoEvents();
                 Require(form.IsHandleCreated && form.Handle != IntPtr.Zero, "The native controller window opens without CS2 or network access");
                 Control[] boxes = form.Controls.Find("setting.Boxes", true);
@@ -151,6 +315,12 @@ namespace Cs2Overlay
                 }
                 int before = ticks; Thread.Sleep(20); Application.DoEvents();
                 Require(ticks > 0 && ticks == before, "Paced UI updates run and stop cleanly after disposal");
+                Control[] noKeys = form.Controls.Find("setting.NoKeybinds", true);
+                ((CheckBox)noKeys[0]).Checked = true;
+                Require(form.Configuration.NoKeybinds && !form.Controls.Find("setting.EspBind", true)[0].Enabled && form.Controls.Find("setting.MenuBind", true)[0].Enabled,
+                    "NO KEYBINDS disables action selectors and preserves the menu key");
+                Require(form.FormBorderStyle == FormBorderStyle.None && form.Region != null,
+                    "The custom client window has rounded geometry and custom window controls");
                 string directory = Path.Combine(Path.GetDirectoryName(output), "previews"); Directory.CreateDirectory(directory);
                 foreach (string page in new string[] { "Dashboard", "Wallhack", "Aimbot + assist", "Spinbot", "Practice camera", "Keybinds" })
                 {
@@ -161,7 +331,8 @@ namespace Cs2Overlay
                         screenshot.Save(Path.Combine(directory, page.Replace(" + ", "-").Replace(" ", "-") + ".png"), ImageFormat.Png);
                     }
                 }
-                Require(Directory.GetFiles(directory, "*.png").Length == 6, "Six Windows GUI previews render successfully");
+                OverlayChecks(directory);
+                Require(Directory.GetFiles(directory, "*.png").Length == 8, "Six GUI pages and two overlay previews render successfully");
                 form.Close();
             }
         }
@@ -172,9 +343,9 @@ namespace Cs2Overlay
             {
                 string output = args.Length == 1 ? Path.GetFullPath(args[0]) : Path.Combine(Path.GetTempPath(), "modafen-smoke.json");
                 Require(IntPtr.Size == 8, "The build runs as a 64-bit process");
-                ProjectionChecks(); MemoryChecks(); InputChecks(); AimChecks(); DataAndProfileChecks();
+                ProjectionChecks(); MemoryChecks(); InputChecks(); AimChecks(); DataAndProfileChecks(); NewFeatureChecks(); FlashChecks();
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); UiChecks(output);
-                string json = new JavaScriptSerializer().Serialize(new { success = true, checks = passed.ToArray(), settings_controls = 78,
+                string json = new JavaScriptSerializer().Serialize(new { success = true, checks = passed.ToArray(), settings_controls = typeof(AppSettings).GetProperties().Length,
                     limitations = "CS2 is unavailable on this runner. Live offsets, gameplay, input acceptance and server camera permissions are not tested." });
                 File.WriteAllText(output, json); Console.WriteLine(json); return 0;
             }

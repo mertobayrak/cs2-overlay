@@ -22,6 +22,9 @@ namespace Cs2Overlay
         public int SnaplineAnchor { get; set; }
         public bool Teammates { get; set; }
         public bool HostageCarrier { get; set; }
+        public bool BombInfo { get; set; }
+        public bool FlashLimitEnabled { get; set; }
+        public int FlashWhiteLimit { get; set; }
         public bool FilledBoxes { get; set; }
         public int FillOpacity { get; set; }
         public bool Outline { get; set; }
@@ -40,6 +43,8 @@ namespace Cs2Overlay
         public int CrosshairGap { get; set; }
         public int CrosshairColor { get; set; }
         public bool AimEnabled { get; set; }
+        public bool RecoilControl { get; set; }
+        public decimal RecoilStrength { get; set; }
         public int AimKey { get; set; }
         public int AimRadius { get; set; }
         public bool DrawFov { get; set; }
@@ -64,6 +69,7 @@ namespace Cs2Overlay
         public int JumpInterval { get; set; }
         public bool GroundOnly { get; set; }
         public bool SpinEnabled { get; set; }
+        public bool SpinPracticeCamera { get; set; }
         public int SpinSpeed { get; set; }
         public int SpinPitch { get; set; }
         public bool SpinJump { get; set; }
@@ -80,6 +86,7 @@ namespace Cs2Overlay
         public bool Antialias { get; set; }
         public bool KeepPanelOnTop { get; set; }
         public int MenuBind { get; set; }
+        public bool NoKeybinds { get; set; }
         public int EspBind { get; set; }
         public int AimBind { get; set; }
         public int AssistBind { get; set; }
@@ -94,8 +101,10 @@ namespace Cs2Overlay
             EnemyColor = Color.Red.ToArgb(); TeamColor = Color.CornflowerBlue.ToArgb();
             BoxThickness = 2; EspDistance = 250; LabelSize = 10; FillOpacity = 20;
             HostageCarrier = true; RadarSize = 200; RadarRange = 60; RadarRotate = true;
+            FlashWhiteLimit = 180;
             CrosshairSize = 6; CrosshairGap = 4; CrosshairColor = Color.LimeGreen.ToArgb();
             AimKey = (int)Keys.RButton; AimRadius = 140; DrawFov = true; AimSmoothMs = 120;
+            RecoilControl = true; RecoilStrength = 1m; SpinPracticeCamera = true;
             Sensitivity = 1m; AutoSensitivity = true; AimDistance = 200; TargetLock = true;
             AimMaxStep = 100; AimDeadzone = 2; TargetIndicator = true; FovColor = Color.LimeGreen.ToArgb();
             AimVisibleOnly = true; AssistKey = (int)Keys.LButton; AssistRadius = 45; AssistSmoothMs = 220; AssistStrength = 0.35m;
@@ -109,6 +118,7 @@ namespace Cs2Overlay
         internal void Validate()
         {
             BoxStyle = Limit(BoxStyle, 0, 1); SnaplineAnchor = Limit(SnaplineAnchor, 0, 2);
+            FlashWhiteLimit = Limit(FlashWhiteLimit, 0, 255);
             FillOpacity = Limit(FillOpacity, 5, 80); BoxThickness = Limit(BoxThickness, 1, 4);
             EspDistance = Limit(EspDistance, 10, 500); LabelSize = Limit(LabelSize, 8, 18);
             RadarSize = Limit(RadarSize, 120, 350); RadarRange = Limit(RadarRange, 10, 200);
@@ -118,6 +128,7 @@ namespace Cs2Overlay
             TargetPriority = Limit(TargetPriority, 0, 2); AimDeadzone = Limit(AimDeadzone, 0, 20); AimMaxStep = Limit(AimMaxStep, 1, 500);
             AssistRadius = Limit(AssistRadius, 10, 250); AssistSmoothMs = Limit(AssistSmoothMs, 30, 500);
             AssistStrength = Math.Max(0.05m, Math.Min(1m, AssistStrength)); JumpInterval = Limit(JumpInterval, 10, 150);
+            RecoilStrength = Math.Max(0m, Math.Min(2m, RecoilStrength));
             SpinSpeed = Limit(SpinSpeed, 90, 3600); SpinPitch = Limit(SpinPitch, -89, 89); FireInterval = Limit(FireInterval, 50, 1000);
             CameraFov = Limit(CameraFov, 54, 200); CameraDistance = Limit(CameraDistance, 50, 400);
             RefreshHz = Limit(RefreshHz, 30, 240); IdleHz = Limit(IdleHz, 2, 30);
@@ -129,12 +140,13 @@ namespace Cs2Overlay
             foreach (int key in binds)
                 if (!KeyOptions.IsGlobal(key) || !unique.Add(key)) throw new InvalidDataException("Choose a different key for each global toggle.");
         }
-        internal void DisableInputs() { AimEnabled = AssistEnabled = BhopEnabled = SpinEnabled = false; }
+        internal void DisableInputs() { AimEnabled = AssistEnabled = BhopEnabled = SpinEnabled = FlashLimitEnabled = false; }
         internal static Color Opaque(int argb) { Color c = Color.FromArgb(argb); return Color.FromArgb(c.R, c.G, c.B); }
     }
 
     internal static class KeyOptions
     {
+        internal static bool ActionEnabled(AppSettings settings, int id) { return !settings.NoKeybinds || id == Native.MenuHotkey; }
         internal static readonly int[] Activation = new int[] { (int)Keys.RButton, (int)Keys.LButton, (int)Keys.XButton1, (int)Keys.XButton2, (int)Keys.LMenu, (int)Keys.LShiftKey };
         internal static readonly int[] Globals = new int[] { (int)Keys.F1, (int)Keys.F2, (int)Keys.F3, (int)Keys.F4, (int)Keys.F5, (int)Keys.F6, (int)Keys.F7, (int)Keys.F8, (int)Keys.F9, (int)Keys.F10, (int)Keys.F11, (int)Keys.F12, (int)Keys.Insert, (int)Keys.Home, (int)Keys.End, (int)Keys.PageUp, (int)Keys.PageDown, (int)Keys.Pause };
         internal static readonly int[] Console = new int[] { (int)Keys.Oemtilde, (int)Keys.OemQuotes, (int)Keys.OemPipe, (int)Keys.OemBackslash };
@@ -179,6 +191,12 @@ namespace Cs2Overlay
 
     internal static class PracticeCamera
     {
+        internal static string SpinCommand(AppSettings settings)
+        {
+            settings.Validate();
+            return "thirdperson_mayamode; cam_snapto 1; cam_idealdist " + settings.CameraDistance.ToString(CultureInfo.InvariantCulture) +
+                "; fov_cs_debug " + (settings.CustomFov ? settings.CameraFov.ToString(CultureInfo.InvariantCulture) : "0");
+        }
         internal static string Command(AppSettings settings)
         {
             settings.Validate();

@@ -36,6 +36,10 @@ namespace Cs2Overlay
         {
             bool ok = TryReadInto(address, scalar, 1); value = ok ? scalar[0] : (byte)0; return ok;
         }
+        internal bool TryUInt16(long address, out ushort value)
+        {
+            bool ok = TryReadInto(address, scalar, 2); value = ok ? BitConverter.ToUInt16(scalar, 0) : (ushort)0; return ok;
+        }
         internal long Pointer(long address) { return TryReadInto(address, scalar, 8) ? BitConverter.ToInt64(scalar, 0) : 0; }
         internal float[] Floats(long address, int count)
         {
@@ -115,6 +119,12 @@ namespace Cs2Overlay
         internal float Pitch, Yaw, Sensitivity;
         internal Vec3 Position, Eye;
         internal long CrosshairPawn;
+        internal BombSnapshot Bomb;
+        internal bool BombInfoUnavailable;
+        internal bool WeaponKnown, PunchKnown;
+        internal int WeaponDefinition, ShotsFired;
+        internal Vec3 Punch;
+        internal long LocalPawn;
     }
 
     internal static class BoneData
@@ -145,6 +155,8 @@ namespace Cs2Overlay
         private int stride, localSlot;
         internal IntPtr Window { get; private set; }
         internal bool Attached { get { return game != null; } }
+        internal int ProcessId { get { return game == null ? 0 : game.Id; } }
+        internal long ClientBase { get { return client; } }
         internal bool HasExited
         {
             get { if (game == null) return true; try { return game.HasExited; } catch (InvalidOperationException) { return true; } }
@@ -232,7 +244,13 @@ namespace Cs2Overlay
         internal Frame ReadFrame(Offsets offsets, AppSettings settings, bool needPlayers)
         {
             Frame frame = new Frame(); if (!Attached) return frame;
+            if (settings.BombInfo)
+            {
+                frame.BombInfoUnavailable = !BombReader.Available(offsets);
+                if (!frame.BombInfoUnavailable) frame.Bomb = BombReader.Read(reader, client, offsets);
+            }
             long list = reader.Pointer(client + offsets.EntityList), localPawn = reader.Pointer(client + offsets.LocalPawn);
+            frame.LocalPawn = localPawn;
             frame.Matrix = reader.Floats(client + offsets.ViewMatrix, 16);
             if (list <= 0 || frame.Matrix == null) { frame.Status = "Game data could not be read. Try Refresh offsets."; return frame; }
             int localHealth, localFlags; byte localTeam, localLife; long localScene;
@@ -259,11 +277,19 @@ namespace Cs2Overlay
                 float[] value = sensitivity > 0 ? reader.Floats(sensitivity + offsets.SensitivityValue, 1) : null;
                 if (value != null && Projection.Finite(value[0]) && value[0] >= 0.05f && value[0] <= 20) frame.Sensitivity = value[0];
             }
-            if (!needPlayers) { frame.Status = frame.Alive ? "Attached. Movement controls ready." : "Attached. Waiting for a live local player."; return frame; }
+            if (settings.RecoilControl && (settings.AimEnabled || settings.SpinEnabled)) RecoilReader.Read(reader, localPawn, offsets, frame);
+            if (!needPlayers && !settings.SpinEnabled) { frame.Status = frame.Alive ? "Attached. Movement controls ready." : "Attached. Waiting for a live local player."; return frame; }
             pages.BeginFrame(list);
             long controller = reader.Pointer(client + offsets.LocalController);
             if (stride == 0 || localSlot <= 0 || pages.Get(localSlot, stride) != controller) stride = FindStride(controller);
             if (stride == 0) { frame.Status = "The entity layout did not match this CS2 build."; return frame; }
+            if (settings.SpinEnabled)
+            {
+                ushort definition;
+                frame.WeaponKnown = WeaponReader.Read(reader, pages, localPawn, offsets, stride, out definition);
+                frame.WeaponDefinition = definition;
+            }
+            if (!needPlayers) { frame.Status = "Attached. Movement controls ready."; return frame; }
             int crosshair;
             if (offsets.CrosshairEntity > 0 && reader.TryInt32(localPawn + offsets.CrosshairEntity, out crosshair) && crosshair > 0 && crosshair < 32768)
                 frame.CrosshairPawn = pages.Get(crosshair, stride);

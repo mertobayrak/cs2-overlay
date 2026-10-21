@@ -16,8 +16,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("ModafenClientXZERO")]
 [assembly: AssemblyDescription("CS2 external overlay and configurable Windows input controls.")]
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.4.0.0")]
+[assembly: AssemblyFileVersion("0.4.0.0")]
 
 namespace Cs2Overlay
 {
@@ -78,6 +78,11 @@ namespace Cs2Overlay
         internal long Health, Team, LifeState, SceneNode, Origin, PlayerPawn, Dormant;
         internal long Flags, ViewOffset, PlayerName, ViewAngles, Sensitivity, SensitivityValue;
         internal long ModelState, HostageServices, CarriedHostage, SpottedState, SpottedMask, CrosshairEntity;
+        internal long PlantedC4, GlobalVars, BombTicking, BombSite, BombBlowTime, BombTimerLength;
+        internal long BombDefusing, BombDefuseLength, BombDefuseEnd, BombDefused, BombExploded, BombCannotDefuse;
+        internal long WeaponServices, ActiveWeapon, AttributeManager, Item, ItemDefinition;
+        internal long ShotsFired, AimPunchServices, PredictablePunch, LegacyPunch;
+        internal long FlashMaxAlpha;
         internal string Revision;
         private static Dictionary<string, object> Map(object value)
         {
@@ -153,6 +158,28 @@ namespace Cs2Overlay
             value.ViewAngles = OptionalNumber(globals, "dwViewAngles");
             value.Sensitivity = OptionalNumber(globals, "dwSensitivity");
             value.SensitivityValue = OptionalNumber(globals, "dwSensitivity_sensitivity");
+            value.PlantedC4 = OptionalNumber(globals, "dwPlantedC4");
+            value.GlobalVars = OptionalNumber(globals, "dwGlobalVars");
+            value.BombTicking = OptionalField(classes, "C_PlantedC4", "m_bBombTicking");
+            value.BombSite = OptionalField(classes, "C_PlantedC4", "m_nBombSite");
+            value.BombBlowTime = OptionalField(classes, "C_PlantedC4", "m_flC4Blow");
+            value.BombTimerLength = OptionalField(classes, "C_PlantedC4", "m_flTimerLength");
+            value.BombDefusing = OptionalField(classes, "C_PlantedC4", "m_bBeingDefused");
+            value.BombDefuseLength = OptionalField(classes, "C_PlantedC4", "m_flDefuseLength");
+            value.BombDefuseEnd = OptionalField(classes, "C_PlantedC4", "m_flDefuseCountDown");
+            value.BombDefused = OptionalField(classes, "C_PlantedC4", "m_bBombDefused");
+            value.BombExploded = OptionalField(classes, "C_PlantedC4", "m_bHasExploded");
+            value.BombCannotDefuse = OptionalField(classes, "C_PlantedC4", "m_bCannotBeDefused");
+            value.WeaponServices = OptionalField(classes, "C_BasePlayerPawn", "m_pWeaponServices");
+            value.ActiveWeapon = OptionalField(classes, "CPlayer_WeaponServices", "m_hActiveWeapon");
+            value.AttributeManager = OptionalField(classes, "C_EconEntity", "m_AttributeManager");
+            value.Item = OptionalField(classes, "C_AttributeContainer", "m_Item");
+            value.ItemDefinition = OptionalField(classes, "C_EconItemView", "m_iItemDefinitionIndex");
+            value.ShotsFired = OptionalField(classes, "C_CSPlayerPawn", "m_iShotsFired");
+            value.AimPunchServices = OptionalField(classes, "C_CSPlayerPawn", "m_pAimPunchServices");
+            value.PredictablePunch = OptionalField(classes, "CCSPlayer_AimPunchServices", "m_predictableBaseAngle");
+            value.LegacyPunch = OptionalField(classes, "C_CSPlayerPawn", "m_aimPunchAngle");
+            value.FlashMaxAlpha = OptionalField(classes, "C_CSPlayerPawnBase", "m_flFlashMaxAlpha");
             value.Revision = revision;
             return value;
         }
@@ -163,7 +190,7 @@ namespace Cs2Overlay
             {
                 client.Timeout = TimeSpan.FromSeconds(20);
                 client.MaxResponseContentBufferSize = 8 * 1024 * 1024;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("ModafenClientXZERO/0.3.0");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("ModafenClientXZERO/0.4.0");
                 string commitJson = await client.GetStringAsync("https://api.github.com/repos/a2x/cs2-dumper/commits/main");
                 JavaScriptSerializer serializer = new JavaScriptSerializer();
                 Dictionary<string, object> commit = Map(serializer.DeserializeObject(commitJson));

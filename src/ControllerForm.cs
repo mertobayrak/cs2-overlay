@@ -11,7 +11,7 @@ using System.Windows.Forms;
 
 namespace Cs2Overlay
 {
-    internal sealed class ControllerForm : Form
+    internal sealed class ControllerForm : RoundedWindow
     {
         private static readonly Color Green = Color.FromArgb(78, 232, 134), Muted = Color.FromArgb(151, 177, 160), CardColor = Color.FromArgb(17, 37, 26);
         private AppSettings settings = new AppSettings();
@@ -29,9 +29,14 @@ namespace Cs2Overlay
         private readonly PhysicalSpace space = new PhysicalSpace();
         private readonly RepeatGate jump = new RepeatGate(), fire = new RepeatGate();
         private readonly AimEngine aim = new AimEngine();
+        private readonly RecoilCompensation recoil = new RecoilCompensation();
+        private readonly SpinCameraMonitor spinCamera = new SpinCameraMonitor();
+        private readonly FlashLimiter flash = new FlashLimiter();
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private Offsets offsets;
         private bool closing, loading, syncing, cameraBusy;
+        private bool lastSpinRequested, spinCameraReady, lastNoKeybinds;
+        private int spinSetupEpoch;
         private DateTime nextAttach = DateTime.MinValue, nextWindow = DateTime.MinValue, nextStatus = DateTime.MinValue;
         private long lastTick, cadenceStart;
         private int frames;
@@ -57,7 +62,7 @@ namespace Cs2Overlay
             root.Controls.Add(side, 0, 0); root.SetRowSpan(side, 3);
             FlowLayoutPanel nav = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(12, 8, 8, 0), AutoScroll = true };
             side.Controls.Add(nav);
-            Label sideFoot = new Label { Dock = DockStyle.Bottom, Height = 110, Padding = new Padding(16, 12, 8, 0), ForeColor = Muted, Text = "XZERO  /  0.3.0\nExternal Windows client\n\nF8  Show / hide menu" };
+            Label sideFoot = new Label { Dock = DockStyle.Bottom, Height = 110, Padding = new Padding(16, 12, 8, 0), ForeColor = Muted, Text = "XZERO  /  0.4.0\nExternal Windows client\n\nF8  Show / hide menu" };
             side.Controls.Add(sideFoot);
             Label brand = new Label { Dock = DockStyle.Top, Height = 110, Padding = new Padding(16, 18, 0, 0), ForeColor = Green, Font = new Font("Segoe UI", 17f, FontStyle.Bold), Text = "MODAFEN\nCLIENT XZERO" };
             side.Controls.Add(brand);
@@ -66,6 +71,14 @@ namespace Cs2Overlay
             title = new Label { Dock = DockStyle.Top, Height = 40, Text = "Dashboard", Font = new Font("Segoe UI", 21f, FontStyle.Bold), ForeColor = Green };
             state = new Label { Dock = DockStyle.Bottom, Height = 30, Text = "Starting...", ForeColor = Muted, AutoEllipsis = true };
             header.Controls.Add(state); header.Controls.Add(title);
+            FlowLayoutPanel windowButtons = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 124, Height = 32, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, BackColor = BackColor };
+            Button minimize = NewButton("—", 36), maximize = NewButton("□", 36), close = NewButton("×", 36);
+            minimize.Height = maximize.Height = close.Height = 28;
+            minimize.Click += delegate { WindowState = FormWindowState.Minimized; };
+            maximize.Click += delegate { WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; };
+            close.Click += delegate { Close(); };
+            windowButtons.Controls.Add(minimize); windowButtons.Controls.Add(maximize); windowButtons.Controls.Add(close); header.Controls.Add(windowButtons); windowButtons.BringToFront();
+            title.MouseDown += DragWindow; header.MouseDown += DragWindow; brand.MouseDown += DragWindow;
             host = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty }; root.Controls.Add(host, 1, 1);
             footer = new Label { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(20, 8, 0, 0), Font = new Font("Segoe UI", 9f), ForeColor = Green, BackColor = Color.FromArgb(5, 18, 11) };
             root.Controls.Add(footer, 1, 2);
@@ -81,7 +94,7 @@ namespace Cs2Overlay
             sessionInfo = Note(card, "Waiting for CS2.", 60);
             version = Note(card, "Offset data not loaded", 30);
             refresh = AddButton(card, "Refresh offsets", async delegate { await LoadOffsets(); });
-            AddButton(card, "Pause all automation", delegate { settings.DisableInputs(); SyncControls(); Log("Aim, assist, bunnyhop and spin paused."); });
+            AddButton(card, "Pause all automation", delegate { settings.DisableInputs(); SyncControls(); Log("Aim, assist, bunnyhop, spin and flash limiting paused."); });
             AddButton(card, "Quit client", delegate { Close(); });
             card = Card("Dashboard", "Performance", "Higher refresh targets update more often. The counter measures this client, not CS2's FPS.");
             Number(card, "RefreshHz", "Refresh target (Hz)", 30, 240, 1, 0);
@@ -95,6 +108,11 @@ namespace Cs2Overlay
             Check(card, "Skeleton", "Skeleton / bones"); Check(card, "Silhouette", "Body silhouette from bones"); Check(card, "Outline", "Black outline");
             Check(card, "FilledBoxes", "Fill player boxes"); Number(card, "FillOpacity", "Fill intensity (%)", 5, 80, 5, 0); Number(card, "BoxThickness", "Line thickness", 1, 4, 1, 0);
             ColorSetting(card, "EnemyColor", "Enemy color"); ColorSetting(card, "TeamColor", "Teammate color");
+            card = Card("Wallhack", "Flashbang white limit", "Reduce flash opacity. 255 is normal strength; lower values reduce the white layer. This changes only your local player's flash-opacity field while enabled.");
+            Check(card, "FlashLimitEnabled", "Limit flashbang white"); Number(card, "FlashWhiteLimit", "Maximum flash opacity", 0, 255, 5, 0);
+            card = Card("Wallhack", "Bomb location + timer", "Show planted C4 at site A/B, its world marker, time until explosion, and the latest start for a 5-second kit or 10-second normal defuse. Active defuses show their own countdown.");
+            Check(card, "BombInfo", "Show planted bomb + defuse timers");
+            Note(card, "Works independently of player wallhack. Timers follow the game clock, including pauses. Missing timing data is shown as unavailable.", 86);
             card = Card("Wallhack", "Labels + filters", "Hostage carriers are marked by HOSTAGE CARRIER text and an orange radar dot when the relevant game data is available.");
             Check(card, "HealthBar", "Health bar"); Check(card, "HealthText", "Health numbers"); Check(card, "Names", "Player names"); Check(card, "Distances", "Distance labels");
             Check(card, "HostageCarrier", "Mark hostage carriers"); Check(card, "Teammates", "Include teammates"); Number(card, "EspDistance", "Max range (m)", 10, 500, 10, 0);
@@ -112,19 +130,22 @@ namespace Cs2Overlay
             Number(card, "AimDistance", "Target range (m)", 10, 500, 10, 0); Check(card, "TargetLock", "Keep current target");
             Choice(card, "TargetPriority", "Target priority", new string[] { "Crosshair", "Nearest", "Lowest health" });
             Check(card, "AimVisibleOnly", "Require spotted by local player"); Number(card, "AimDeadzone", "Deadzone (px)", 0, 20, 1, 0); Number(card, "AimMaxStep", "Max mouse step", 1, 500, 5, 0);
+            Check(card, "RecoilControl", "Aimbot recoil control"); Number(card, "RecoilStrength", "Recoil strength (1 = full)", 0m, 2m, 0.05m, 2);
             card = Card("Aimbot + assist", "Aim assist", "A smaller FOV, slower smoothing and adjustable strength give a lighter pull while its activation key is held. Aimbot takes priority when both are active.");
             Check(card, "AssistEnabled", "Enable aim assist"); KeyChoice(card, "AssistKey", "Hold key", KeyOptions.Activation);
             Number(card, "AssistRadius", "Assist FOV radius (px)", 10, 250, 5, 0); Number(card, "AssistSmoothMs", "Assist smoothing (ms)", 30, 500, 10, 0); Number(card, "AssistStrength", "Assist strength", 0.05m, 1m, 0.05m, 2);
             card = Card("Aimbot + assist", "Calibration + display", "Automatic sensitivity uses the game's reported value. Use the manual value when your setup needs calibration. Spotted data is not a geometric wall trace.");
-            Check(card, "AutoSensitivity", "Read game sensitivity"); Number(card, "Sensitivity", "Manual sensitivity", 0.05m, 20m, 0.05m, 2); Check(card, "DrawFov", "Show aim FOV circle"); Check(card, "TargetIndicator", "Mark selected target"); ColorSetting(card, "FovColor", "FOV circle color");
+            Check(card, "AutoSensitivity", "Read game sensitivity"); Number(card, "Sensitivity", "Manual sensitivity", 0.05m, 20m, 0.05m, 2); Check(card, "DrawFov", "Show FOV circle (also when aim is off)"); Check(card, "TargetIndicator", "Mark selected target"); ColorSetting(card, "FovColor", "FOV circle color");
 
             card = Card("Movement", "Bunnyhop", "Enable, then hold physical Space in CS2 to repeat Jump. Jump must be bound to Space. Repetition stops on release or when CS2 loses focus.");
             Check(card, "BhopEnabled", "Enable bunnyhop"); Number(card, "JumpInterval", "Jump interval (ms)", 10, 150, 5, 0); Check(card, "GroundOnly", "Jump only while on ground");
             Note(card, "Spinbot can also jump automatically without holding Space when its Auto bunnyhop option is enabled.", 75);
 
-            card = Card("Spinbot", "Spinbot", "Spin and look down automatically. Targeting interrupts spinning while a spotted enemy is on screen. Auto-fire clicks only when the game crosshair identifies a spotted enemy.");
+            card = Card("Spinbot", "Spinbot / Scout only", "Only active while the SSG 08 (Scout) is equipped. Spin, automatic jumping, targeting and fire all pause when you change weapon or weapon data is unavailable.");
             Risk(card, "HIGHER RISK", "Spinning, repeated jumping and automatic fire are conspicuous automation. There is no ban protection.", "risk.spin");
             Check(card, "SpinEnabled", "Enable spinbot"); Number(card, "SpinSpeed", "Spin speed (degrees/s)", 90, 3600, 90, 0); Number(card, "SpinPitch", "Look pitch (down = 89)", -89, 89, 1, 0);
+            Check(card, "SpinPracticeCamera", "Auto third-person Maya camera (practice)");
+            Note(card, "Requests CS2's Maya-style third-person camera. Requires the game console and sv_cheats on a practice server. Spin stops if the camera follows your turning view; fire waits for a steady camera.", 140);
             Check(card, "SpinJump", "Auto bunnyhop"); Check(card, "SpinTarget", "Aim at spotted on-screen enemies"); Check(card, "SpinShoot", "Auto-fire at crosshair enemy"); Number(card, "FireInterval", "Fire interval (ms)", 50, 1000, 10, 0);
             Note(card, "All spin inputs require a live local player and CS2 in the foreground. Opening the menu stops input immediately.", 75);
 
@@ -138,6 +159,7 @@ namespace Cs2Overlay
             AddButton(card, "Restore first person + default FOV", async delegate { settings.ThirdPerson = settings.CustomFov = false; SyncControls(); await ApplyCamera(); });
 
             card = Card("Keybinds", "Global toggles", "Pick a unique key for every action, then select Apply keybinds. The main controls also work when a key is already used by another app.");
+            Check(card, "NoKeybinds", "NO KEYBINDS (menu key only)");
             KeyChoice(card, "MenuBind", "Show / hide menu", KeyOptions.Globals); KeyChoice(card, "EspBind", "Wallhack", KeyOptions.Globals); KeyChoice(card, "AimBind", "Aimbot", KeyOptions.Globals); KeyChoice(card, "AssistBind", "Aim assist", KeyOptions.Globals);
             KeyChoice(card, "BhopBind", "Bunnyhop", KeyOptions.Globals); KeyChoice(card, "SpinBind", "Spinbot", KeyOptions.Globals); KeyChoice(card, "PanicBind", "Everything off", KeyOptions.Globals); KeyChoice(card, "QuitBind", "Quit client", KeyOptions.Globals);
             AddButton(card, "Apply keybinds", delegate { Run(delegate { settings.Validate(); RegisterKeys(); Log("Keybinds applied."); }); });
@@ -155,12 +177,12 @@ namespace Cs2Overlay
         }
         private Button NewButton(string text, int width)
         {
-            Button button = new Button { Text = text, Width = width, Height = 34, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(25, 61, 39), ForeColor = ForeColor, Cursor = Cursors.Hand, UseVisualStyleBackColor = false };
+            Button button = new RoundedButton { Text = text, Width = width, Height = 34, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(25, 61, 39), ForeColor = ForeColor, Cursor = Cursors.Hand, UseVisualStyleBackColor = false };
             button.FlatAppearance.BorderColor = Color.FromArgb(42, 91, 59); return button;
         }
         private FlowLayoutPanel Card(string page, string heading, string description)
         {
-            FlowLayoutPanel card = new FlowLayoutPanel { Width = 370, MinimumSize = new Size(370, 0), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowLayoutPanel card = new RoundedCard { Width = 370, MinimumSize = new Size(370, 0), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(16, 14, 16, 14), Margin = new Padding(0, 0, 14, 14), BackColor = CardColor };
             card.Controls.Add(new Label { Text = heading, Width = 334, Height = 32, ForeColor = Green, Font = new Font("Segoe UI", 13f, FontStyle.Bold) });
             int height = TextRenderer.MeasureText(description, Font, new Size(334, 0), TextFormatFlags.WordBreak).Height + 12;
@@ -224,6 +246,15 @@ namespace Cs2Overlay
         {
             PropertyInfo property = Property(name); Label caption; Panel row = Row(card, label, out caption);
             ComboBox control = new ComboBox { Name = "setting." + name, DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(202, 2), Size = new Size(132, 28), BackColor = Color.FromArgb(9, 24, 16), ForeColor = ForeColor, FlatStyle = FlatStyle.Flat };
+            control.DrawMode = DrawMode.OwnerDrawFixed; control.ItemHeight = 22;
+            control.DrawItem += delegate(object sender, DrawItemEventArgs args)
+            {
+                if (args.Index < 0) return;
+                Color background = (args.State & DrawItemState.Selected) != 0 ? Color.FromArgb(28, 78, 44) : Color.FromArgb(9, 24, 16);
+                using (Brush brush = new SolidBrush(background)) args.Graphics.FillRectangle(brush, args.Bounds);
+                Rectangle text = args.Bounds; text.X += 5;
+                TextRenderer.DrawText(args.Graphics, options[args.Index], Font, text, control.Enabled ? ForeColor : Muted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            };
             caption.Width = 198; control.Items.AddRange(options);
             control.SelectedIndexChanged += delegate { if (syncing || control.SelectedIndex < 0) return; property.SetValue(settings, values[control.SelectedIndex], null); SettingsChanged(); };
             bindings.Add(delegate { control.SelectedIndex = Array.IndexOf(values, (int)property.GetValue(settings, null)); }); row.Controls.Add(control);
@@ -253,10 +284,23 @@ namespace Cs2Overlay
         }
         private void SettingsChanged()
         {
+            if (!settings.FlashLimitEnabled) flash.Disable();
             TopMost = settings.KeepPanelOnTop;
-            footer.Text = KeyOptions.Label(settings.MenuBind) + " menu    " + KeyOptions.Label(settings.EspBind) + " wallhack    " + KeyOptions.Label(settings.AimBind) + " aim    " + KeyOptions.Label(settings.BhopBind) + " hop    " + KeyOptions.Label(settings.SpinBind) + " spin    " + KeyOptions.Label(settings.QuitBind) + " quit";
+            footer.Text = settings.NoKeybinds ? KeyOptions.Label(settings.MenuBind) + " menu    /    NO KEYBINDS enabled" : KeyOptions.Label(settings.MenuBind) + " menu    " + KeyOptions.Label(settings.EspBind) + " wallhack    " + KeyOptions.Label(settings.AimBind) + " aim    " + KeyOptions.Label(settings.BhopBind) + " hop    " + KeyOptions.Label(settings.SpinBind) + " spin    " + KeyOptions.Label(settings.QuitBind) + " quit";
+            foreach (string name in new string[] { "EspBind", "AimBind", "AssistBind", "BhopBind", "SpinBind", "QuitBind", "PanicBind" })
+                foreach (Control key in Controls.Find("setting." + name, true)) key.Enabled = !settings.NoKeybinds;
             try { if (!previewMode) space.Enable(settings.BhopEnabled); }
             catch (Win32Exception error) { settings.BhopEnabled = false; if (log != null) Log(error.Message); SyncControls(); }
+            if (settings.NoKeybinds != lastNoKeybinds)
+            {
+                lastNoKeybinds = settings.NoKeybinds;
+                if (!previewMode && IsHandleCreated) RegisterKeys();
+            }
+            if (settings.SpinEnabled != lastSpinRequested)
+            {
+                lastSpinRequested = settings.SpinEnabled; spinSetupEpoch++; spinCameraReady = false;
+                spinCamera.Reset();
+            }
         }
         internal void SelectPage(string name)
         {
@@ -273,6 +317,10 @@ namespace Cs2Overlay
         {
             base.OnShown(args); if (previewMode) return; RegisterKeys(); pulse.Start(100); await LoadOffsets();
         }
+        protected override void OnHandleCreated(EventArgs args)
+        {
+            base.OnHandleCreated(args); ClientTheme.SoftenWindow(Handle);
+        }
         private void RegisterKeys()
         {
             if (!IsHandleCreated) return;
@@ -280,7 +328,7 @@ namespace Cs2Overlay
             int[] keys = new int[] { settings.MenuBind, settings.EspBind, settings.AimBind, settings.AssistBind, settings.BhopBind, settings.SpinBind, settings.QuitBind, settings.PanicBind };
             foreach (int id in ids) Native.UnregisterHotKey(Handle, id);
             for (int i = 0; i < ids.Length; i++)
-                if (!Native.RegisterHotKey(Handle, ids[i], 0x4000, (uint)keys[i])) Log(KeyOptions.Label(keys[i]) + " is already registered elsewhere. Use the panel controls.");
+                if (KeyOptions.ActionEnabled(settings, ids[i]) && !Native.RegisterHotKey(Handle, ids[i], 0x4000, (uint)keys[i])) Log(KeyOptions.Label(keys[i]) + " is already registered elsewhere. Use the panel controls.");
         }
         private void UnregisterKeys()
         {
@@ -298,7 +346,7 @@ namespace Cs2Overlay
         private async Task LoadOffsets()
         {
             if (loading || closing) return;
-            loading = true; refresh.Enabled = false; offsets = null; session.Dispose(); overlay.Hide(); ResetAutomation();
+            loading = true; refresh.Enabled = false; flash.Disable(); offsets = null; session.Dispose(); overlay.Hide(); ResetAutomation();
             SetState("Loading published offset data..."); Log(state.Text);
             try
             {
@@ -308,14 +356,15 @@ namespace Cs2Overlay
                 if (offsets.ModelState == 0) Log("Skeleton data is not present in this offset revision.");
                 if (offsets.ViewAngles == 0) Log("View angles are unavailable. Aim and spin will stay inactive.");
                 if (offsets.HostageServices == 0 || offsets.CarriedHostage == 0) Log("Hostage-carrier data is unavailable in this revision.");
+                if (!BombReader.Available(offsets)) Log("Bomb location/timer data is unavailable in this offset revision.");
             }
             catch (Exception error) { if (!closing) { SetState("Offset download failed. Select Refresh offsets."); Log(error.Message); } }
             finally { loading = false; if (!closing) refresh.Enabled = true; }
         }
-        private void ResetAutomation() { aim.Reset(); jump.Reset(); fire.Reset(); }
+        private void ResetAutomation() { aim.Reset(); recoil.Reset(); jump.Reset(); fire.Reset(); spinCamera.Reset(); }
         private void Idle(string message)
         {
-            overlay.Hide(); ResetAutomation(); pulse.SetPeriod(1000 / settings.IdleHz); if (message != null) SetState(message);
+            overlay.Hide(); flash.Disable(); ResetAutomation(); pulse.SetPeriod(1000 / settings.IdleHz); if (message != null) SetState(message);
             cadenceStart = clock.ElapsedMilliseconds; frames = 0;
         }
         private void UpdateFrame()
@@ -336,12 +385,20 @@ namespace Cs2Overlay
             }
             if (DateTime.UtcNow >= nextWindow) { nextWindow = DateTime.UtcNow.AddSeconds(1); session.RefreshWindow(); }
             if (session.Window == IntPtr.Zero || Native.GetForegroundWindow() != session.Window) { Idle("Attached. Switch to CS2; " + KeyOptions.Label(settings.MenuBind) + " opens the panel."); return; }
-            bool any = settings.EspEnabled || settings.AimEnabled || settings.AssistEnabled || settings.BhopEnabled || settings.SpinEnabled || settings.Crosshair || settings.Hud;
+            bool any = OverlayOptions.ShouldDraw(settings) || settings.AimEnabled || settings.AssistEnabled || settings.BhopEnabled || settings.SpinEnabled || settings.FlashLimitEnabled;
             if (!any) { Idle("All features are off."); return; }
             pulse.SetPeriod((int)Math.Round(1000.0 / settings.RefreshHz));
             Rectangle bounds; if (!session.TryBounds(out bounds)) { Idle("Waiting for a visible CS2 window."); return; }
             bool needPlayers = settings.EspEnabled || settings.AimEnabled || settings.AssistEnabled || (settings.SpinEnabled && (settings.SpinTarget || settings.SpinShoot));
             Frame frame = session.ReadFrame(offsets, settings, needPlayers); AimSolution solution = null;
+            if (settings.FlashLimitEnabled && frame.Alive)
+            {
+                string error;
+                if (!flash.Apply(session.ProcessId, frame.LocalPawn, session.ClientBase + offsets.LocalPawn, offsets.FlashMaxAlpha, settings.FlashWhiteLimit, out error))
+                { settings.FlashLimitEnabled = false; flash.Disable(); SyncControls(); Log(error); }
+            }
+            else flash.Disable();
+            if (settings.SpinPracticeCamera && !spinCameraReady && InputPolicy.SpinAllowed(settings, frame)) { PrepareSpinCamera(); return; }
             try { solution = Automate(frame, bounds.Size, seconds, now); }
             catch (Win32Exception error) { settings.DisableInputs(); ResetAutomation(); SyncControls(); Log(error.Message); }
             frames++;
@@ -349,35 +406,52 @@ namespace Cs2Overlay
             {
                 cadence = Math.Round(frames * 1000.0 / Math.Max(1, now - cadenceStart)) + " updates/s"; cadenceStart = now; frames = 0;
             }
-            bool draw = settings.EspEnabled || settings.Hud || settings.Crosshair || ((settings.AimEnabled || settings.AssistEnabled) && (settings.DrawFov || settings.TargetIndicator));
+            bool draw = OverlayOptions.ShouldDraw(settings);
             if (draw) overlay.Present(frame, bounds, settings, solution, cadence); else overlay.Hide();
             if (DateTime.UtcNow >= nextStatus)
             {
                 nextStatus = DateTime.UtcNow.AddSeconds(1);
                 string status = frame.Status;
                 if ((settings.AimEnabled || settings.AssistEnabled || settings.SpinEnabled) && !frame.AnglesValid) status += " | Aim/spin waiting for valid camera data";
+                if (settings.SpinEnabled && !InputPolicy.SpinAllowed(settings, frame)) status += frame.WeaponKnown ? " | Spin paused: equip SSG 08" : " | Spin paused: weapon data unavailable";
+                if (settings.AimEnabled && settings.RecoilControl && frame.ShotsFired > 0 && !frame.PunchKnown) status += " | Recoil data unavailable";
                 SetState(status); sessionInfo.Text = status + "\n" + cadence; Log(status);
             }
         }
         private AimSolution Automate(Frame frame, Size viewport, double seconds, long now)
         {
             if (!frame.Alive) { ResetAutomation(); return null; }
-            bool grounded = !settings.GroundOnly || (frame.GroundKnown && frame.OnGround);
-            bool jumpHeld = (settings.BhopEnabled && space.State.Held) || (settings.SpinEnabled && settings.SpinJump);
-            if (jump.Pulse(settings.BhopEnabled || (settings.SpinEnabled && settings.SpinJump), true, frame.Alive && grounded, jumpHeld, now, settings.JumpInterval)) InputSender.Jump(session.Window);
-            if (settings.SpinEnabled)
+            bool spin = InputPolicy.SpinAllowed(settings, frame) && (!settings.SpinPracticeCamera || spinCameraReady);
+            if (spin && settings.SpinPracticeCamera)
             {
+                SpinCameraState camera = spinCamera.Observe(frame);
+                if (camera == SpinCameraState.FollowingView || camera == SpinCameraState.Unavailable)
+                {
+                    settings.SpinEnabled = false; SyncControls(); ResetAutomation();
+                    Log("Spin stopped: a steady third-person camera could not be verified. The practice server may have rejected the command."); return null;
+                }
+            }
+            bool grounded = !settings.GroundOnly || (frame.GroundKnown && frame.OnGround);
+            bool jumpHeld = (settings.BhopEnabled && space.State.Held) || (spin && settings.SpinJump);
+            if (jump.Pulse(settings.BhopEnabled || (spin && settings.SpinJump), true, frame.Alive && grounded, jumpHeld, now, settings.JumpInterval)) InputSender.Jump(session.Window);
+            if (spin)
+            {
+                recoil.Reset();
                 bool enemyAtCrosshair = InputPolicy.CanFire(frame);
-                if (fire.Pulse(settings.SpinShoot, true, frame.Alive, enemyAtCrosshair, now, settings.FireInterval)) InputSender.Click(session.Window);
-                AimSolution target = settings.SpinTarget ? aim.Step(frame, settings, viewport, seconds, 2) : null;
+                bool cameraReady = !settings.SpinPracticeCamera || spinCamera.Verified;
+                if (fire.Pulse(settings.SpinShoot && cameraReady, true, frame.Alive, enemyAtCrosshair, now, settings.FireInterval)) InputSender.Click(session.Window);
+                AimSolution target = settings.SpinTarget && cameraReady ? aim.Step(frame, settings, viewport, seconds, 2) : null;
                 InputSender.Move(session.Window, target != null ? target.Move : AimEngine.Spin(frame, settings, seconds));
                 return target;
             }
             fire.Reset();
             if (settings.AimEnabled && InputSender.Held(settings.AimKey))
             {
-                AimSolution target = aim.Step(frame, settings, viewport, seconds, 0); if (target != null) InputSender.Move(session.Window, target.Move); return target;
+                AimSolution target = aim.Step(frame, settings, viewport, seconds, 0);
+                Point compensation = recoil.Step(frame, settings, InputSender.Held((int)Keys.LButton), target == null);
+                InputSender.Move(session.Window, target != null ? target.Move : compensation); return target;
             }
+            recoil.Reset();
             if (settings.AssistEnabled && InputSender.Held(settings.AssistKey))
             {
                 AimSolution target = aim.Step(frame, settings, viewport, seconds, 1); if (target != null) InputSender.Move(session.Window, target.Move); return target;
@@ -398,10 +472,39 @@ namespace Cs2Overlay
                 {
                     SetState("Switch to CS2. Applying practice camera in " + i + "..."); await Task.Delay(1000); if (closing) return;
                 }
-                await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command);
+                await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command, delegate { return !closing; });
                 if (!closing) Log("Camera command sent. The server must allow sv_cheats; check the game console for its response.");
             }
             catch (Exception error) { if (!closing) { SetState(error.Message); Log(error.Message); } }
+            finally { cameraBusy = false; }
+        }
+        private async void PrepareSpinCamera()
+        {
+            if (cameraBusy || !session.Attached || closing)
+            {
+                settings.SpinEnabled = false; SyncControls(); Log("Open CS2 and finish any camera operation before enabling spin."); return;
+            }
+            int epoch = spinSetupEpoch; cameraBusy = true; ResetAutomation();
+            Func<bool> permitted = delegate { return !closing && settings.SpinEnabled && spinSetupEpoch == epoch; };
+            try
+            {
+                string command = PracticeCamera.SpinCommand(settings);
+                if (Native.GetForegroundWindow() != session.Window)
+                {
+                    for (int i = 3; i >= 1; i--)
+                    {
+                        SetState("Switch to CS2. Requesting Scout spin camera in " + i + "..."); await Task.Delay(1000);
+                        if (!permitted()) throw new OperationCanceledException();
+                    }
+                }
+                await InputSender.CameraCommand(session.Window, settings.ConsoleKey, command, permitted);
+                if (permitted()) { spinCameraReady = true; Log("Maya-style third-person camera requested. Server acceptance is unverified; spin is restricted to SSG 08."); }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error)
+            {
+                if (!closing && spinSetupEpoch == epoch) { settings.SpinEnabled = false; SyncControls(); Log(error.Message); }
+            }
             finally { cameraBusy = false; }
         }
         private void ExportCamera()
@@ -414,6 +517,7 @@ namespace Cs2Overlay
             if (message.Msg == Native.WmHotkey)
             {
                 int key = message.WParam.ToInt32();
+                if (!KeyOptions.ActionEnabled(settings, key)) { base.WndProc(ref message); return; }
                 if (key == Native.MenuHotkey)
                 {
                     if (Visible && WindowState != FormWindowState.Minimized && ContainsFocus) Hide();
@@ -424,7 +528,7 @@ namespace Cs2Overlay
                 if (key == Native.AssistHotkey) settings.AssistEnabled = !settings.AssistEnabled;
                 if (key == Native.JumpHotkey) settings.BhopEnabled = !settings.BhopEnabled;
                 if (key == Native.SpinHotkey) { settings.SpinEnabled = !settings.SpinEnabled; aim.Reset(); }
-                if (key == Native.PanicHotkey) { settings.DisableInputs(); settings.EspEnabled = settings.Crosshair = settings.Hud = false; ResetAutomation(); overlay.Hide(); }
+                if (key == Native.PanicHotkey) { settings.DisableInputs(); settings.EspEnabled = settings.Crosshair = settings.Hud = settings.DrawFov = settings.BombInfo = false; ResetAutomation(); overlay.Hide(); }
                 if (key == Native.QuitHotkey) { Close(); return; }
                 SyncControls();
             }
@@ -432,13 +536,13 @@ namespace Cs2Overlay
         }
         protected override void OnFormClosing(FormClosingEventArgs args)
         {
-            closing = true; pulse.Dispose(); UnregisterKeys(); space.Dispose(); overlay.Dispose(); session.Dispose(); base.OnFormClosing(args);
+            closing = true; pulse.Dispose(); UnregisterKeys(); space.Dispose(); flash.Dispose(); overlay.Dispose(); session.Dispose(); base.OnFormClosing(args);
         }
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                closing = true; if (pulse != null) pulse.Dispose(); UnregisterKeys(); space.Dispose(); overlay.Dispose(); session.Dispose();
+                closing = true; if (pulse != null) pulse.Dispose(); UnregisterKeys(); space.Dispose(); flash.Dispose(); overlay.Dispose(); session.Dispose();
             }
             base.Dispose(disposing);
         }

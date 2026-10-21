@@ -173,12 +173,15 @@ namespace Cs2Overlay
             for (int i = 0; i < text.Length; i++) { events[i * 2] = Key(0, text[i], 4); events[i * 2 + 1] = Key(0, text[i], 6); }
             Emit(window, events);
         }
-        internal static async Task CameraCommand(IntPtr window, int consoleKey, string command)
+        internal static async Task CameraCommand(IntPtr window, int consoleKey, string command, Func<bool> permitted = null)
         {
+            if (permitted != null && !permitted()) throw new OperationCanceledException();
             if (Native.GetForegroundWindow() != window) throw new InvalidOperationException("Switch to CS2 before the countdown ends.");
             Press(window, consoleKey); await Task.Delay(160);
+            if (permitted != null && !permitted()) throw new OperationCanceledException();
             if (Native.GetForegroundWindow() != window) throw new InvalidOperationException("Camera command stopped because CS2 lost focus.");
             Text(window, command); Press(window, (int)Keys.Enter); await Task.Delay(120);
+            if (permitted != null && !permitted()) throw new OperationCanceledException();
             if (Native.GetForegroundWindow() == window) Press(window, consoleKey);
         }
     }
@@ -191,6 +194,10 @@ namespace Cs2Overlay
     }
     internal static class InputPolicy
     {
+        internal static bool SpinAllowed(AppSettings settings, Frame frame)
+        {
+            return settings.SpinEnabled && frame.Alive && frame.WeaponKnown && frame.WeaponDefinition == WeaponReader.Scout;
+        }
         internal static bool CanFire(Frame frame)
         {
             if (!frame.Alive || frame.CrosshairPawn <= 0) return false;
@@ -230,11 +237,18 @@ namespace Cs2Overlay
             if (locked != solution.Target.Id) { remainderX = remainderY = 0; }
             locked = solution.Target.Id;
             double px = solution.Screen.X - size.Width / 2f, py = solution.Screen.Y - size.Height / 2f;
-            if (px * px + py * py <= settings.AimDeadzone * settings.AimDeadzone) { remainderX = remainderY = 0; return solution; }
+            bool recoil = mode != 1 && settings.RecoilControl && frame.PunchKnown && frame.ShotsFired > 0;
+            if (!recoil && px * px + py * py <= settings.AimDeadzone * settings.AimDeadzone) { remainderX = remainderY = 0; return solution; }
             Vec3 target = solution.Target.Target(settings.AimPoint);
             double x = target.X - frame.Eye.X, y = target.Y - frame.Eye.Y, z = target.Z - frame.Eye.Z;
             double desiredYaw = Math.Atan2(y, x) * 180 / Math.PI;
             double desiredPitch = -Math.Atan2(z, Math.Sqrt(x * x + y * y)) * 180 / Math.PI;
+            if (recoil)
+            {
+                desiredPitch -= frame.Punch.X * 2 * (double)settings.RecoilStrength;
+                desiredYaw -= frame.Punch.Y * 2 * (double)settings.RecoilStrength;
+                desiredPitch = Math.Max(-89, Math.Min(89, desiredPitch));
+            }
             double sensitivity = settings.AutoSensitivity && frame.Sensitivity > 0 ? frame.Sensitivity : (double)settings.Sensitivity;
             double smooth = mode == 1 ? settings.AssistSmoothMs : (mode == 2 ? 25 : settings.AimSmoothMs);
             double alpha = smooth <= 0 ? 1 : 1 - Math.Exp(-Math.Max(0.001, Math.Min(0.05, seconds)) * 1000 / smooth);

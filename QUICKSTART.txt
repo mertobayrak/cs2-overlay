@@ -1,4 +1,4 @@
-ModafenClientXZERO 0.3.0 - Windows x64
+ModafenClientXZERO 0.4.0 - Windows x64
 
 1. Close the old CS2Overlay.exe before starting this version.
 2. Extract the archive and run ModafenClientXZERO.exe.
@@ -11,11 +11,13 @@ F6   Wallhack on/off.
 F5   Aimbot on/off. Hold Right Mouse while enabled.
 F4   Aim assist on/off. Hold Left Mouse while enabled.
 F7   Bunnyhop on/off. Hold physical Space; Jump must be bound to Space.
-F9   Spinbot on/off: spins/looks down, auto jumps, and targets/fires as configured.
+F9   Scout-only spinbot on/off. Other weapons pause spin, auto-hop and fire.
 F12  Everything off.
 F10  Quit the client.
 
 All input automation starts off. Change keys on Keybinds, then Apply keybinds.
+NO KEYBINDS in Keybinds disables all client shortcuts except the menu key.
+The panel controls and feature hold activations remain available.
 If a key is already used by another application, use the panel controls.
 
 WALLHACK
@@ -24,8 +26,31 @@ from bones for red body styles. Choose colors, health, names, range and labels.
 Mark hostage carriers is toggleable. Radar with wallhack enables an external
 radar; orange dots identify hostage carriers when that data is available.
 
+FLASHBANG WHITE LIMIT
+Wallhack > Limit flashbang white enables Maximum flash opacity (0-255).
+180 is the default reduced setting; 0 is the minimum and 255 removes the cap.
+This changes the local player's flash-opacity field while enabled. Disabling,
+pausing, losing focus or closing attempts to restore the previous value.
+The option starts off and stays off when loading a profile. Sound is unchanged.
+
+BOMB + FOV CIRCLE
+Wallhack > Show planted bomb + defuse timers shows site A/B, a world marker,
+seconds until explosion, latest start times with/without a kit, and any active
+defuse countdown. This setting works with player wallhack off and while dead.
+With radar enabled, C4 appears as an orange square. Timers follow game time.
+
+Aimbot + assist > Show FOV circle (also when aim is off) controls the circle
+independently. Set Aim FOV radius and FOV circle color in the same page.
+Showing it does not enable aiming. F12 turns these new overlays off as well.
+
 AIM / SPIN
 Aimbot and assist have separate FOV, smoothing and activation controls.
+Aimbot recoil control and Recoil strength counter reported recoil while firing.
+Spin works only with SSG 08 equipped. Its automatic practice camera requests
+thirdperson_mayamode. Enable the developer console and use a practice server
+with sv_cheats 1. Spin stops if the camera follows the turning view; fire
+waits until the camera is observed steady. Public servers can reject this
+camera command. Use Practice camera to restore first person afterward.
 Spin targets spotted on-screen enemies, interrupting its rotation to aim.
 Auto-fire only clicks at a spotted enemy identified by the game crosshair.
 Input stops when CS2 loses focus or your local player is not alive.

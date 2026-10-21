@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.Windows.Forms;
 
 namespace Cs2Overlay
@@ -176,7 +177,56 @@ namespace Cs2Overlay
                 Color color = settings.HostageCarrier && player.Carrier ? Color.Orange : AppSettings.Opaque(player.Teammate ? settings.TeamColor : settings.EnemyColor);
                 using (Brush brush = new SolidBrush(color)) g.FillEllipse(brush, point.X - 3, point.Y - 3, 6, 6);
             }
+            if (settings.BombInfo && frame.Bomb != null && frame.Bomb.PositionValid && frame.Bomb.Phase == BombPhase.Planted)
+            {
+                PointF bomb = RadarProjection.Point(frame.Bomb.Position, frame.Position, frame.Yaw, settings.RadarRotate, settings.RadarRange, area);
+                g.FillRectangle(Brushes.Orange, bomb.X - 4, bomb.Y - 4, 8, 8);
+                g.DrawString("C4", SystemFonts.MessageBoxFont, Brushes.Orange, bomb.X + 4, bomb.Y - 7);
+            }
             g.FillEllipse(Brushes.White, area.X + size / 2 - 3, area.Y + size / 2 - 3, 6, 6);
+        }
+        private static string Seconds(float value) { return value.ToString("0.0", CultureInfo.InvariantCulture) + "s"; }
+        private void Bomb(Graphics g)
+        {
+            if (frame.Bomb == null && !frame.BombInfoUnavailable) return;
+            BombSnapshot bomb = frame.Bomb;
+            float width = Math.Min(400, ClientSize.Width - 32), left = (ClientSize.Width - width) / 2f;
+            float height = bomb != null && bomb.Phase == BombPhase.Planted ? (bomb.BeingDefused ? 132 : 108) : 52;
+            RectangleF panel = new RectangleF(left, 92, width, height);
+            Color color = bomb == null ? Color.Orange : (bomb.Phase == BombPhase.Defused ? Color.LimeGreen : (bomb.Phase == BombPhase.Exploded ? Color.OrangeRed : Color.Orange));
+            g.FillRectangle(Brushes.Black, panel);
+            using (Pen border = new Pen(color, 1)) g.DrawRectangle(border, panel.X, panel.Y, panel.Width, panel.Height);
+            if (bomb == null)
+            {
+                g.DrawString("Bomb data unavailable for this build", caption, Brushes.Orange, left + 12, panel.Top + 14); return;
+            }
+            string phase = bomb.Phase == BombPhase.Defused ? "DEFUSED" : (bomb.Phase == BombPhase.Exploded ? "EXPLODED" : "PLANTED");
+            using (Brush brush = new SolidBrush(color)) g.DrawString("C4 " + phase + "  /  SITE " + bomb.Site, caption, brush, left + 12, panel.Top + 10);
+            if (bomb.Phase == BombPhase.Planted)
+            {
+                g.DrawString(bomb.TimerKnown ? "Explodes in: " + Seconds(bomb.SecondsLeft) : "Explosion timer unavailable", caption, Brushes.White, left + 12, panel.Top + 34);
+                string start = bomb.CannotDefuse ? "This bomb cannot be defused" : "Start by: kit " + bomb.StartLabel(true) + "  |  no kit " + bomb.StartLabel(false);
+                Brush startColor = bomb.TimerKnown && bomb.LatestStart(true) <= 0 ? Brushes.OrangeRed : Brushes.White;
+                g.DrawString(start, SystemFonts.MessageBoxFont, startColor, left + 12, panel.Top + 60);
+                if (bomb.BeingDefused)
+                {
+                    string defuse = bomb.DefuseTimerKnown ? "Defusing: " + Seconds(bomb.DefuseSeconds) + " left  /  " + (bomb.DefuseInTime ? "on time" : "too late") : "Defusing: timer unavailable";
+                    g.DrawString(defuse, caption, bomb.DefuseTimerKnown && bomb.DefuseInTime ? Brushes.LimeGreen : Brushes.OrangeRed, left + 12, panel.Top + 82);
+                }
+                if (bomb.TimerKnown)
+                {
+                    float fraction = Math.Max(0, Math.Min(1, bomb.SecondsLeft / bomb.TimerLength));
+                    using (Brush progress = new SolidBrush(color)) g.FillRectangle(progress, left + 12, panel.Bottom - 10, (width - 24) * fraction, 4);
+                }
+            }
+            PointF position;
+            if (bomb.PositionValid && Screen(bomb.Position, out position) && position.X >= 0 && position.X <= ClientSize.Width && position.Y >= 0 && position.Y <= ClientSize.Height)
+            {
+                using (Pen marker = new Pen(color, 2))
+                    g.DrawPolygon(marker, new PointF[] { new PointF(position.X, position.Y - 9), new PointF(position.X + 9, position.Y), new PointF(position.X, position.Y + 9), new PointF(position.X - 9, position.Y) });
+                string label = "C4 / " + bomb.Site + " / " + (bomb.Phase == BombPhase.Planted ? (bomb.TimerKnown ? Seconds(bomb.SecondsLeft) : "timer unavailable") : phase);
+                TextAt(g, label, Math.Max(8, Math.Min(ClientSize.Width - 240, position.X + 13)), Math.Max(8, Math.Min(ClientSize.Height - labelFont.Height - 8, position.Y - 12)), color);
+            }
         }
         protected override void OnPaint(PaintEventArgs args)
         {
@@ -184,9 +234,9 @@ namespace Cs2Overlay
             Graphics g = args.Graphics; g.SmoothingMode = settings.Antialias ? SmoothingMode.AntiAlias : SmoothingMode.None;
             if (settings.EspEnabled) foreach (Player player in frame.Players) Person(g, player);
             if (settings.EspEnabled && settings.Radar) Radar(g);
-            if (settings.DrawFov && (settings.AimEnabled || settings.AssistEnabled))
+            if (settings.DrawFov)
             {
-                int radius = settings.AimEnabled ? settings.AimRadius : settings.AssistRadius;
+                int radius = OverlayOptions.CircleRadius(settings);
                 using (Pen circle = new Pen(AppSettings.Opaque(settings.FovColor), 1)) g.DrawEllipse(circle, ClientSize.Width / 2 - radius, ClientSize.Height / 2 - radius, radius * 2, radius * 2);
             }
             if (settings.TargetIndicator && aim != null && (settings.AimEnabled || settings.AssistEnabled || settings.SpinEnabled))
@@ -209,6 +259,7 @@ namespace Cs2Overlay
                 g.DrawString(frame.Status, SystemFonts.MessageBoxFont, Brushes.White, 20, 39);
                 g.DrawString("ESP " + (settings.EspEnabled ? "ON" : "OFF") + "   AIM " + (settings.AimEnabled ? "ON" : "OFF") + "   ASSIST " + (settings.AssistEnabled ? "ON" : "OFF") + "   HOP " + (settings.BhopEnabled ? "ON" : "OFF") + "   SPIN " + (settings.SpinEnabled ? "ON" : "OFF"), SystemFonts.MessageBoxFont, Brushes.White, 20, 56);
             }
+            if (settings.BombInfo) Bomb(g);
         }
         protected override void Dispose(bool disposing)
         {
