@@ -60,6 +60,8 @@ The green client uses a rounded custom window, rounded cards and buttons, subtle
 
 On **Spinbot**, enable **Automatic chase camera (practice)**. This follows your living character from behind like a spectator chase view, while keeping the viewing direction separate from the character's spin. **Chase distance** defaults to 150 and **Chase viewing pitch** to 12 degrees. The camera direction starts behind your current heading; it does not turn with the spinning player's view. Changing those settings reinitializes the camera when you return to CS2 with the Scout equipped.
 
+Automatic chase camera starts enabled. Once you enable Spinbot and equip the Scout in the focused game, the client requests third person before submitting spin movement. No separate spectator action is needed.
+
 This uses CS2's third-person camera and steady orbit controls on a practice server, and requires server permission for cheats. It does not change spectator status or send spec_mode. Spin stops if the rendered camera follows the turning player, and targeting/fire wait until a steady direction is observed. Exact live camera behavior remains unverified by offline tests.
 
 The setup changes camera pitch bounds to -180/180 and maximum distance to 400 so the requested offset can be applied even when the player is looking down. **Restore first person** pauses automation, leaves the requested steady orbit mode and restores first person, default FOV, pitch bounds 0/90 and maximum distance 200. These are engine defaults, not a snapshot of earlier custom console values. Camera commands use the configured developer-console key.
